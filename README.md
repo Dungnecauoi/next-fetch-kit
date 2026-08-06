@@ -21,6 +21,29 @@ A lightweight, type-safe `fetch` wrapper for **Next.js** — works in both SSR a
 
 ## Install
 
+### From GitHub (Recommended)
+
+```bash
+# npm
+npm install Dungnecauoi/next-fetch-kit
+
+# pnpm
+pnpm add Dungnecauoi/next-fetch-kit
+
+# yarn
+yarn add Dungnecauoi/next-fetch-kit
+
+# bun
+bun add Dungnecauoi/next-fetch-kit
+```
+
+Or via full Git HTTPS URL:
+```bash
+npm install git+https://github.com/Dungnecauoi/next-fetch-kit.git
+```
+
+### From npm Registry
+
 ```bash
 npm install next-fetch-kit
 ```
