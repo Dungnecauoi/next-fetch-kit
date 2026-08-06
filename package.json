@@ -1,0 +1,63 @@
+{
+  "name": "next-fetch-kit",
+  "version": "0.1.0",
+  "description": "A lightweight, type-safe fetch wrapper for Next.js — works in SSR & CSR with built-in auth refresh & cookie forwarding",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "next",
+    "nextjs",
+    "fetch",
+    "http",
+    "client",
+    "ssr",
+    "csr",
+    "typescript",
+    "api",
+    "auth",
+    "refresh-token"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "next": ">=13.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "msw": "^2.15.0",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
