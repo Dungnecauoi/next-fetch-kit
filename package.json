@@ -44,6 +44,11 @@
     "auth",
     "refresh-token"
   ],
+  "author": "Dungnecauoi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dungnecauoi/next-fetch-kit.git"
+  },
   "license": "MIT",
   "peerDependencies": {
     "next": ">=13.0.0"
