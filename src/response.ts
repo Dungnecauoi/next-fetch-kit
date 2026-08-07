@@ -21,8 +21,21 @@ export async function parseResponse<T>(
   response: Response,
   config?: RequestContext,
 ): Promise<FetchKitResponse<T>> {
-  // Check for HTTP errors (4xx, 5xx)
-  if (!response.ok) {
+  // Determine status validity
+  const ignoreResponseError =
+    config?.requestConfig.ignoreResponseError ?? config?.instanceConfig.ignoreResponseError;
+
+  const validateStatus =
+    ignoreResponseError
+      ? () => true
+      : config?.requestConfig.validateStatus ??
+        config?.instanceConfig.validateStatus ??
+        ((status: number) => status >= 200 && status < 300);
+
+  const isValidStatus = validateStatus(response.status);
+
+  // Check for HTTP errors (4xx, 5xx) if status is invalid
+  if (!isValidStatus) {
     throw await FetchKitError.fromResponse(response, config);
   }
 

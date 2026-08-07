@@ -1,6 +1,6 @@
 {
   "name": "next-fetch-kit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A lightweight, type-safe fetch wrapper for Next.js — works in SSR & CSR with built-in auth refresh & cookie forwarding",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -60,6 +60,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "@vitest/coverage-v8": "^4.1.10",
     "msw": "^2.15.0",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2",

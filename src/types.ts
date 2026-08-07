@@ -16,6 +16,26 @@ export interface NextOptions {
 /**
  * Retry configuration.
  */
+/**
+ * Utility type allowing a single hook function or an array of hook functions.
+ */
+export type HookOrArray<T> = T | T[];
+
+/**
+ * Details passed to the beforeRetry callback.
+ */
+export interface BeforeRetryDetails {
+  /** Current attempt number (1-based index) */
+  attempt: number;
+  /** Delay in milliseconds before this retry attempt */
+  delay: number;
+  /** Error that triggered the retry */
+  error: FetchKitErrorLike;
+}
+
+/**
+ * Retry configuration.
+ */
 export interface RetryConfig {
   /** Number of retry attempts (default: 0) */
   count: number;
@@ -32,6 +52,8 @@ export interface RetryConfig {
   retryOn?: number[] | ((error: FetchKitErrorLike) => boolean);
   /** HTTP methods to retry (default: ['GET', 'HEAD', 'OPTIONS']) */
   methods?: string[];
+  /** Callback invoked right before each retry attempt */
+  beforeRetry?: (details: BeforeRetryDetails) => void | Promise<void>;
 }
 
 /**
@@ -79,35 +101,38 @@ export interface AuthConfig {
 
 /**
  * Interceptor hooks for request/response lifecycle.
+ * Accepts a single function or an array of functions (chaining).
  */
 export interface InterceptorHooks {
   /**
    * Called before each request is sent.
    * Modify headers, log, etc. Return the (optionally modified) config.
    */
-  onRequest?: (config: RequestContext) => RequestContext | Promise<RequestContext>;
+  onRequest?: HookOrArray<(config: RequestContext) => RequestContext | Promise<RequestContext>>;
 
   /**
    * Called after a successful response (2xx).
    * Can transform the response.
    */
-  onResponse?: (response: FetchKitResponse<unknown>) => FetchKitResponse<unknown> | void | Promise<FetchKitResponse<unknown> | void>;
+  onResponse?: HookOrArray<
+    (response: FetchKitResponse<unknown>) => FetchKitResponse<unknown> | void | Promise<FetchKitResponse<unknown> | void>
+  >;
 
   /**
    * Called when a request fails (network error, timeout, abort).
    */
-  onRequestError?: (error: FetchKitErrorInstance) => void | Promise<void>;
+  onRequestError?: HookOrArray<(error: FetchKitErrorInstance) => void | Promise<void>>;
 
   /**
    * Called when a response has an HTTP error status (4xx, 5xx).
    */
-  onResponseError?: (error: FetchKitErrorInstance) => void | Promise<void>;
+  onResponseError?: HookOrArray<(error: FetchKitErrorInstance) => void | Promise<void>>;
 
   /**
    * Universal error handler called for ALL errors (HTTP errors, network errors, timeouts, aborts).
    * Useful for global toast notifications or centralized logging.
    */
-  onError?: (error: FetchKitErrorInstance) => void | Promise<void>;
+  onError?: HookOrArray<(error: FetchKitErrorInstance) => void | Promise<void>>;
 }
 
 /**
@@ -159,14 +184,35 @@ export interface FetchKitConfig extends InterceptorHooks {
 
   /** Auth configuration for token management and auto-refresh */
   auth?: AuthConfig;
+
+  /**
+   * Custom fetch implementation to use instead of globalThis.fetch.
+   * Useful for testing, custom proxies, or Edge Runtime mock fetch.
+   */
+  fetch?: typeof fetch;
+
+  /**
+   * Custom status validator function to determine if an HTTP status code is valid.
+   * Default: status >= 200 && status < 300
+   */
+  validateStatus?: (status: number) => boolean;
+
+  /**
+   * When true, disables HTTP error throwing for 4xx/5xx status codes.
+   * Shortcut for validateStatus: () => true.
+   */
+  ignoreResponseError?: boolean;
 }
 
 /**
  * Per-request configuration options.
  */
 export interface RequestConfig {
-  /** URL query parameters */
+  /** URL query parameters (alias for query) */
   params?: Record<string, unknown>;
+
+  /** URL query parameters (alias for params) */
+  query?: Record<string, unknown>;
 
   /** Request body — auto-stringified for objects, passthrough for FormData */
   body?: unknown;
@@ -205,8 +251,20 @@ export interface RequestConfig {
    */
   cookies?: CookieStore | string;
 
-  /** Internal flag to prevent infinite auth refresh loops */
-  _isAuthRetry?: boolean;
+  /**
+   * Custom fetch implementation for this specific request.
+   */
+  fetch?: typeof fetch;
+
+  /**
+   * Custom status validator function for this request.
+   */
+  validateStatus?: (status: number) => boolean;
+
+  /**
+   * When true, disables HTTP error throwing for 4xx/5xx status codes for this request.
+   */
+  ignoreResponseError?: boolean;
 }
 
 /**

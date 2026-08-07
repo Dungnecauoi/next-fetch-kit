@@ -36,6 +36,7 @@ export async function withRetry(
     backoff = false,
     retryOn,
     methods = DEFAULT_RETRY_METHODS,
+    beforeRetry,
   } = retryConfig;
 
   // Check if this HTTP method is retryable
@@ -51,8 +52,13 @@ export async function withRetry(
 
       // Check if response status should trigger a retry
       if (attempt < count && shouldRetryResponse(response.status, retryOn)) {
-        lastError = await FetchKitError.fromResponse(response.clone(), config);
-        await sleep(calculateDelay(delay, attempt, backoff));
+        const err = await FetchKitError.fromResponse(response.clone(), config);
+        lastError = err;
+        const retryDelay = calculateDelay(delay, attempt, backoff);
+        if (beforeRetry) {
+          await beforeRetry({ attempt: attempt + 1, delay: retryDelay, error: err });
+        }
+        await sleep(retryDelay, config?.requestConfig.signal);
         continue;
       }
 
@@ -71,7 +77,15 @@ export async function withRetry(
       // Check custom retry condition
       if (!shouldRetryError(error, retryOn)) break;
 
-      await sleep(calculateDelay(delay, attempt, backoff));
+      const retryDelay = calculateDelay(delay, attempt, backoff);
+      if (beforeRetry) {
+        const errShape =
+          error instanceof FetchKitError
+            ? error
+            : { type: 'network', message: error instanceof Error ? error.message : String(error) };
+        await beforeRetry({ attempt: attempt + 1, delay: retryDelay, error: errShape });
+      }
+      await sleep(retryDelay, config?.requestConfig.signal);
     }
   }
 
@@ -126,6 +140,29 @@ function calculateDelay(baseDelay: number, attempt: number, backoff: boolean): n
   return exponential + jitter;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      return reject(
+        new FetchKitError('Request was aborted', {
+          type: 'abort',
+          cause: signal.reason,
+        }),
+      );
+    }
+
+    const timer = setTimeout(resolve, ms);
+
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(
+        new FetchKitError('Request was aborted', {
+          type: 'abort',
+          cause: signal?.reason,
+        }),
+      );
+    };
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }

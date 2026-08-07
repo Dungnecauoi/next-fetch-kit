@@ -8,16 +8,12 @@ A lightweight, type-safe `fetch` wrapper for **Next.js** — works in both SSR a
 
 ## Why next-fetch-kit?
 
-| Feature | next-fetch-kit | axios | ky | ofetch |
-|:---|:---|:---|:---|:---|
-| SSR + CSR | ✅ | ❌ | ✅ | ✅ |
-| Next.js `revalidate/tags` | ✅ | ❌ | ❌ | ❌ |
-| Cookie forwarding (SSR) | ✅ | ❌ | ❌ | ❌ |
-| Auto refresh token (401) | ✅ | ❌ | ❌ | ❌ |
-| Auto retry | ✅ | ❌ | ✅ | ✅ |
-| Timeout | ✅ | ✅ | ✅ | ⚠️ |
-| Bundle size | ~3.5KB | ~13KB | ~4KB | ~6KB |
-| Zero dependencies | ✅ | ❌ | ✅ | ✅ |
+- **SSR + CSR Native**: Full compatibility with Next.js App Router (Server Components & Client Components).
+- **Next.js Revalidation & Cache**: Native `revalidate`, `tags`, and `cache` pass-through options.
+- **Auto Cookie Forwarding**: Automatically forwards cookies from `next/headers` during SSR.
+- **Auto Auth Refresh (401)**: Built-in token refresh queue for header & httpOnly cookie authentication patterns.
+- **Ultra Lightweight**: Zero dependencies, ~4KB gzipped.
+- **Full Type Safety**: Written 100% in TypeScript.
 
 ## Install
 
@@ -328,25 +324,98 @@ try {
 }
 ```
 
+### Custom `fetch` Implementation
+
+Ghi đè `fetch` gốc bằng custom implementation (rất hữu ích cho unit test, mock fetch, proxy, hoặc Edge Runtime):
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  fetch: customFetchImpl, // Ghi đè ở instance level
+});
+
+// Hoặc ghi đè ở per-request level
+await api.get('/users', { fetch: mockFetch });
+```
+
+### Hook Chaining (Array of Interceptors)
+
+Hỗ trợ mảng các hook functions chạy nối tiếp theo thứ tự (pipeline pattern):
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  // Mảng các request hooks
+  onRequest: [addAuthHeader, addTraceId, logRequest],
+  // Mảng các response hooks
+  onResponse: [transformDateStrings, logMetrics],
+});
+```
+
+### Custom Status Validation (`validateStatus` & `ignoreResponseError`)
+
+```typescript
+// validateStatus: Tùy chỉnh HTTP status nào được coi là thành công (không throw error)
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  validateStatus: (status) => status < 500, // 4xx không throw error, trả về data bình thường
+});
+
+// ignoreResponseError: Phím tắt không throw HTTP error cho bất kỳ status nào (4xx, 5xx)
+const { data, status } = await api.get('/users/999', {
+  ignoreResponseError: true,
+});
+```
+
+### `beforeRetry` Hook
+
+Lắng nghe trước mỗi lần thử lại (retry):
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  retry: {
+    count: 3,
+    delay: 1000,
+    beforeRetry: ({ attempt, delay, error }) => {
+      console.log(`Retrying attempt ${attempt} in ${delay}ms due to ${error.message}`);
+    },
+  },
+});
+```
+
+### Query Params Alias (`query` hoặc `params`)
+
+```typescript
+// Hỗ trợ cả query lẫn params
+await api.get('/users', {
+  query: { page: 1, limit: 20 }, // alias cho params
+});
+```
+
 ## API Reference
 
 ### `createFetchKit(config)`
 
 | Option | Type | Default | Description |
 |:---|:---|:---|:---|
-| `baseURL` | `string` | `''` | Base URL for all requests |
+| `baseURL` | `string` | `''` | Base URL cho tất cả requests |
 | `headers` | `HeadersInit` | `{}` | Default headers |
 | `credentials` | `RequestCredentials` | - | Credentials mode |
-| `timeout` | `number` | - | Timeout in ms |
+| `timeout` | `number` | - | Timeout tính bằng ms |
 | `retry` | `RetryConfig \| number` | - | Retry configuration |
 | `next` | `NextOptions` | - | Next.js cache options |
 | `cache` | `RequestCache` | - | Cache mode |
-| `forwardCookies` | `boolean` | `false` | Auto-forward cookies in SSR |
-| `auth` | `AuthConfig` | - | Auth & refresh config |
-| `onRequest` | `Function` | - | Before-request hook |
-| `onResponse` | `Function` | - | After-response hook |
-| `onRequestError` | `Function` | - | Network error hook |
-| `onResponseError` | `Function` | - | HTTP error hook |
+| `forwardCookies` | `boolean` | `false` | Tự động forward cookies trong SSR |
+| `auth` | `AuthConfig` | - | Auth & auto-refresh token config |
+| `fetch` | `typeof fetch` | `globalThis.fetch` | Custom fetch implementation |
+| `validateStatus` | `(status: number) => boolean` | `200..299` | Custom status validator |
+| `ignoreResponseError` | `boolean` | `false` | Không throw HTTP error cho 4xx/5xx |
+| `onRequest` | `HookOrArray<Function>` | - | Before-request hook (đơn hoặc mảng) |
+| `onResponse` | `HookOrArray<Function>` | - | After-response hook (đơn hoặc mảng) |
+| `onRequestError` | `HookOrArray<Function>` | - | Network error hook (đơn hoặc mảng) |
+| `onResponseError` | `HookOrArray<Function>` | - | HTTP error hook (đơn hoặc mảng) |
+| `onError` | `HookOrArray<Function>` | - | Universal error hook (đơn hoặc mảng) |
 
 ### Instance Methods
 

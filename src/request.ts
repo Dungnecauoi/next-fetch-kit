@@ -25,11 +25,12 @@ export async function buildRequestContext(
 ): Promise<RequestContext> {
   const merged = mergeConfigs(instanceConfig, requestConfig);
 
-  // Build URL
+  // Build URL — support query alias for params
+  const params = requestConfig.query ?? requestConfig.params;
   const baseURL = (instanceConfig.baseURL || '').replace(/\/+$/, '');
   const normalizedPath = path.startsWith('/') || path.startsWith('http') ? path : `/${path}`;
   const fullPath = path.startsWith('http') ? path : `${baseURL}${normalizedPath}`;
-  const url = appendParams(fullPath, requestConfig.params);
+  const url = appendParams(fullPath, params);
 
   // Build headers
   const headers = merged.headers;

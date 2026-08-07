@@ -64,13 +64,18 @@ function createInstanceMethods(
 ): FetchKitInstance {
   /**
    * Core request execution pipeline.
+   *
+   * @param _isAuthRetry - Internal flag to prevent infinite auth refresh loops.
+   *   NOT exposed in public RequestConfig to prevent user tampering (BUG-1 fix).
    */
   async function request<T>(
     method: string,
     path: string,
     requestConfig: RequestConfig = {},
+    _isAuthRetry = false,
   ): Promise<FetchKitResponse<T>> {
     let context: RequestContext | undefined;
+    let authRefreshAttempted = _isAuthRetry;
 
     try {
       // Step 1: Build request context
@@ -81,9 +86,9 @@ function createInstanceMethods(
         await authManager.applyToken(context.headers);
       }
 
-      // Step 3: Run onRequest hook
+      // Step 3: Run onRequest hooks
       if (config.onRequest) {
-        context = await config.onRequest(context);
+        context = await runRequestHooks(config.onRequest, context);
       }
 
       // Step 4: Determine retry config
@@ -95,11 +100,14 @@ function createInstanceMethods(
       // Step 5: Determine timeout
       const timeout = requestConfig.timeout ?? config.timeout;
 
-      // Step 6: Execute with retry → timeout → fetch pipeline
+      // Step 6: Determine fetch implementation
+      const fetchFn = requestConfig.fetch ?? config.fetch ?? globalThis.fetch;
+
+      // Step 7: Execute with retry → timeout → fetch pipeline
       const rawResponse = await withRetry(
         () =>
           withTimeout(
-            (signal) => fetch(context!.url, { ...context!.init, signal }),
+            (signal) => fetchFn(context!.url, { ...context!.init, signal }),
             timeout,
             requestConfig.signal,
             context,
@@ -109,13 +117,14 @@ function createInstanceMethods(
         context,
       );
 
-      // Step 7: Check for 401 and attempt auth refresh (only once per request)
+      // Step 8: Check for 401 and attempt auth refresh (only once per request)
       if (
         rawResponse.status === 401 &&
-        !context.requestConfig._isAuthRetry &&
+        !authRefreshAttempted &&
         authManager?.hasRefresh() &&
         createRawInstance
       ) {
+        authRefreshAttempted = true;
         return await handleAuthRefresh<T>(
           authManager,
           createRawInstance,
@@ -127,15 +136,12 @@ function createInstanceMethods(
         );
       }
 
-      // Step 8: Parse response
+      // Step 9: Parse response
       const response = await parseResponse<T>(rawResponse, context);
 
-      // Step 9: Run onResponse hook
+      // Step 10: Run onResponse hooks
       if (config.onResponse) {
-        const modified = await config.onResponse(response as FetchKitResponse<unknown>);
-        if (modified) {
-          return modified as FetchKitResponse<T>;
-        }
+        return await runResponseHooks<T>(config.onResponse, response);
       }
 
       return response;
@@ -143,18 +149,15 @@ function createInstanceMethods(
       const fetchKitError = FetchKitError.from(error, context);
 
       // Handle 401 from error path (e.g., after parse throws HTTP error)
-      const isAuthRetry =
-        fetchKitError.config?.requestConfig?._isAuthRetry ||
-        context?.requestConfig?._isAuthRetry;
-
       if (
         fetchKitError.isHttpError() &&
         fetchKitError.status === 401 &&
         context &&
-        !isAuthRetry &&
+        !authRefreshAttempted &&
         authManager?.hasRefresh() &&
         createRawInstance
       ) {
+        authRefreshAttempted = true;
         return await handleAuthRefresh<T>(
           authManager,
           createRawInstance,
@@ -168,14 +171,14 @@ function createInstanceMethods(
 
       // Run error hooks
       if (fetchKitError.isHttpError() && config.onResponseError) {
-        await config.onResponseError(fetchKitError);
+        await runErrorHooks(config.onResponseError, fetchKitError);
       } else if (!fetchKitError.isHttpError() && config.onRequestError) {
-        await config.onRequestError(fetchKitError);
+        await runErrorHooks(config.onRequestError, fetchKitError);
       }
 
       // Run universal onError hook if configured
       if (config.onError) {
-        await config.onError(fetchKitError);
+        await runErrorHooks(config.onError, fetchKitError);
       }
 
       throw fetchKitError;
@@ -218,15 +221,14 @@ async function handleAuthRefresh<T>(
     const rawInstance = createRawInstance();
     const newToken = await authManager.handleUnauthorized(rawInstance, context);
 
-    // Retry the original request with _isAuthRetry: true to prevent infinite loops
-    const retryConfig: RequestConfig = {
+    // Retry the original request — disable retry to prevent double-retry
+    const retryRequestConfig: RequestConfig = {
       ...requestConfig,
       retry: false,
-      _isAuthRetry: true,
     };
 
-    // Re-execute through the same pipeline (will call getToken() again for new token)
-    retryContext = await buildRequestContext(method, path, config, retryConfig);
+    // Re-build request context for the retry
+    retryContext = await buildRequestContext(method, path, config, retryRequestConfig);
 
     // Apply new token manually if header-based
     if (newToken) {
@@ -236,18 +238,90 @@ async function handleAuthRefresh<T>(
       await authManager.applyToken(retryContext.headers);
     }
 
-    const rawResponse = await fetch(retryContext.url, retryContext.init);
-    return await parseResponse<T>(rawResponse, retryContext);
+    // Run onRequest hook on the retry context
+    if (config.onRequest) {
+      retryContext = await runRequestHooks(config.onRequest, retryContext);
+    }
+
+    // Wrap retry fetch with timeout protection and custom fetch
+    const timeout = requestConfig.timeout ?? config.timeout;
+    const fetchFn = requestConfig.fetch ?? config.fetch ?? globalThis.fetch;
+
+    const rawResponse = await withTimeout(
+      (signal) => fetchFn(retryContext!.url, { ...retryContext!.init, signal }),
+      timeout,
+      requestConfig.signal,
+      retryContext,
+    );
+
+    // Parse the retry response
+    const response = await parseResponse<T>(rawResponse, retryContext);
+
+    // Run onResponse hook on the retry response
+    if (config.onResponse) {
+      return await runResponseHooks<T>(config.onResponse, response);
+    }
+
+    return response;
   } catch (refreshError) {
     // Run error hooks for the failed retry
     const errContext = retryContext ?? context;
     const fetchKitError = FetchKitError.from(refreshError, errContext);
-    if (config.onResponseError) {
-      await config.onResponseError(fetchKitError);
+    if (fetchKitError.isHttpError() && config.onResponseError) {
+      await runErrorHooks(config.onResponseError, fetchKitError);
+    } else if (!fetchKitError.isHttpError() && config.onRequestError) {
+      await runErrorHooks(config.onRequestError, fetchKitError);
     }
     if (config.onError) {
-      await config.onError(fetchKitError);
+      await runErrorHooks(config.onError, fetchKitError);
     }
     throw fetchKitError;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Hook Execution Helpers (Support single function or array of functions)
+// ---------------------------------------------------------------------------
+
+async function runRequestHooks(
+  hooks: FetchKitConfig['onRequest'],
+  context: RequestContext,
+): Promise<RequestContext> {
+  if (!hooks) return context;
+  const list = Array.isArray(hooks) ? hooks : [hooks];
+  let current = context;
+  for (const fn of list) {
+    const next = await fn(current);
+    if (next) current = next;
+  }
+  return current;
+}
+
+async function runResponseHooks<T>(
+  hooks: FetchKitConfig['onResponse'],
+  response: FetchKitResponse<T>,
+): Promise<FetchKitResponse<T>> {
+  if (!hooks) return response;
+  const list = Array.isArray(hooks) ? hooks : [hooks];
+  let current = response as FetchKitResponse<unknown>;
+  for (const fn of list) {
+    const next = await fn(current);
+    if (next) current = next;
+  }
+  return current as FetchKitResponse<T>;
+}
+
+async function runErrorHooks(
+  hooks:
+    | FetchKitConfig['onRequestError']
+    | FetchKitConfig['onResponseError']
+    | FetchKitConfig['onError'],
+  error: FetchKitError,
+): Promise<void> {
+  if (!hooks) return;
+  const list = Array.isArray(hooks) ? hooks : [hooks];
+  for (const fn of list) {
+    await fn(error);
+  }
+}
+

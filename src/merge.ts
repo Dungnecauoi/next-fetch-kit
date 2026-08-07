@@ -95,16 +95,33 @@ export function mergeInstanceConfigs(
   base: FetchKitConfig,
   override: Partial<FetchKitConfig>,
 ): FetchKitConfig {
+  const hasHeaders = base.headers !== undefined || override.headers !== undefined;
   return {
     ...base,
     ...override,
-    headers: mergeHeaders(base.headers, override.headers)
+    headers: hasHeaders
       ? Object.fromEntries(mergeHeaders(base.headers, override.headers))
       : undefined,
     next: mergeNextOptions(base.next, override.next),
     retry: override.retry !== undefined ? override.retry : base.retry,
     auth: override.auth !== undefined ? { ...base.auth, ...override.auth } : base.auth,
+    fetch: override.fetch ?? base.fetch,
+    validateStatus: override.validateStatus ?? base.validateStatus,
+    ignoreResponseError: override.ignoreResponseError ?? base.ignoreResponseError,
+    onRequest: mergeHooks(base.onRequest, override.onRequest),
+    onResponse: mergeHooks(base.onResponse, override.onResponse),
+    onRequestError: mergeHooks(base.onRequestError, override.onRequestError),
+    onResponseError: mergeHooks(base.onResponseError, override.onResponseError),
+    onError: mergeHooks(base.onError, override.onError),
   };
+}
+
+function mergeHooks<T>(base?: T | T[], override?: T | T[]): T[] | undefined {
+  if (!base && !override) return undefined;
+  const baseArr = base ? (Array.isArray(base) ? base : [base]) : [];
+  const overrideArr = override ? (Array.isArray(override) ? override : [override]) : [];
+  const merged = [...baseArr, ...overrideArr];
+  return merged.length > 0 ? merged : undefined;
 }
 
 // ---------------------------------------------------------------------------
