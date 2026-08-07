@@ -2,9 +2,7 @@
 
 A lightweight (~4.5KB gzipped), type-safe `fetch` wrapper for **Next.js** — designed for seamless operation in both **SSR (Server Components, Route Handlers, Middleware)** and **CSR (Client Components)** with built-in auth refresh queue, request deduplication, event bus, and SSR cookie forwarding.
 
-[![npm version](https://img.shields.io/npm/v/next-fetch-kit.svg)](https://www.npmjs.com/package/next-fetch-kit)
-[![bundle size](https://img.shields.io/bundlephobia/minzip/next-fetch-kit)](https://bundlephobia.com/package/next-fetch-kit)
-[![license](https://img.shields.io/npm/l/next-fetch-kit.svg)](https://opensource.org/licenses/MIT)
+[![license](https://img.shields.io/github/license/Dungnecauoi/next-fetch-kit.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
@@ -24,7 +22,16 @@ A lightweight (~4.5KB gzipped), type-safe `fetch` wrapper for **Next.js** — de
 
 ## 📦 Installation
 
-### From GitHub (Recommended)
+### 1. From Local Path (Khi test/phát triển local)
+
+```bash
+# Trong dự án Next.js của bạn:
+npm install ../next-fetch-kit
+# hoặc đường dẫn tuyệt đối:
+npm install /Volumes/SSD-1/Code/lib-nextjs/next-fetch-kit
+```
+
+### 2. From GitHub
 
 ```bash
 # npm
@@ -35,21 +42,9 @@ pnpm add Dungnecauoi/next-fetch-kit
 
 # yarn
 yarn add Dungnecauoi/next-fetch-kit
-
-# bun
-bun add Dungnecauoi/next-fetch-kit
 ```
 
-Or via specific release tag:
-```bash
-npm install Dungnecauoi/next-fetch-kit#v0.4.0
-```
-
-### From npm Registry
-
-```bash
-npm install next-fetch-kit
-```
+> **Lưu ý:** Gói này hiện tại chưa được publish lên **npm registry**. Khi bạn sẵn sàng release, hãy chạy `npm publish` để mọi người có thể cài trực tiếp qua `npm install next-fetch-kit`.
 
 ---
 
