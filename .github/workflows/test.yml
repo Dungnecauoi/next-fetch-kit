@@ -32,8 +32,8 @@ jobs:
       - name: Typecheck (TypeScript)
         run: npm run lint
 
-      - name: Run Vitest Suite & Coverage
-        run: npx vitest run --coverage
+      - name: Run Vitest Suite
+        run: npm test
 
       - name: Build Package
         run: npm run build

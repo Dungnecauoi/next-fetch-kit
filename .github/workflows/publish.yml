@@ -32,7 +32,12 @@ jobs:
       - name: Build Production Dist
         run: npm run build
 
+      - name: Check NPM_TOKEN Secret
+        id: check_token
+        run: echo "has_token=${{ secrets.NPM_TOKEN != '' }}" >> $GITHUB_OUTPUT
+
       - name: Publish to NPM
+        if: steps.check_token.outputs.has_token == 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
