@@ -47,8 +47,12 @@ export async function buildRequestContext(
     }
   }
 
+  // Apply transformRequest if configured
+  const transformRequest = requestConfig.transformRequest ?? instanceConfig.transformRequest;
+  const rawBody = transformRequest ? transformRequest(requestConfig.body) : requestConfig.body;
+
   // Serialize body
-  const { body, contentType } = serializeBody(requestConfig.body);
+  const { body, contentType } = serializeBody(rawBody);
   if (contentType && !headers.has('Content-Type')) {
     headers.set('Content-Type', contentType);
   }

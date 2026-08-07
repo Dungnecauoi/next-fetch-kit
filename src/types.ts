@@ -22,6 +22,23 @@ export interface NextOptions {
 export type HookOrArray<T> = T | T[];
 
 /**
+ * Event names supported by FetchKit event emitter.
+ */
+export type FetchKitEventType =
+  | 'request'
+  | 'response'
+  | 'error'
+  | 'retry'
+  | 'auth:refreshed'
+  | 'auth:refresh-failed';
+
+/**
+ * Event handler function shape.
+ */
+
+export type FetchKitEventHandler = (payload: any) => void;
+
+/**
  * Details passed to the beforeRetry callback.
  */
 export interface BeforeRetryDetails {
@@ -41,6 +58,8 @@ export interface RetryConfig {
   count: number;
   /** Delay between retries in ms (default: 1000) */
   delay?: number;
+  /** Maximum delay cap in ms for backoff (default: 30000) */
+  maxDelay?: number;
   /** Use exponential backoff (default: false) */
   backoff?: boolean;
   /**
@@ -202,6 +221,20 @@ export interface FetchKitConfig extends InterceptorHooks {
    * Shortcut for validateStatus: () => true.
    */
   ignoreResponseError?: boolean;
+  /**
+   * When true, automatically deduplicates simultaneous identical in-flight GET/HEAD requests.
+   */
+  dedupe?: boolean;
+
+  /**
+   * Custom request data transformer called before body serialization.
+   */
+  transformRequest?: (data: unknown) => unknown;
+
+  /**
+   * Custom response data transformer called after body parsing.
+   */
+  transformResponse?: (data: unknown) => unknown;
 }
 
 /**
@@ -265,6 +298,21 @@ export interface RequestConfig {
    * When true, disables HTTP error throwing for 4xx/5xx status codes for this request.
    */
   ignoreResponseError?: boolean;
+
+  /**
+   * Override in-flight request deduplication for this request.
+   */
+  dedupe?: boolean;
+
+  /**
+   * Custom request data transformer for this request.
+   */
+  transformRequest?: (data: unknown) => unknown;
+
+  /**
+   * Custom response data transformer for this request.
+   */
+  transformResponse?: (data: unknown) => unknown;
 }
 
 /**
@@ -338,4 +386,13 @@ export interface FetchKitInstance {
   head<T = unknown>(path: string, config?: RequestConfig): Promise<FetchKitResponse<T>>;
   options<T = unknown>(path: string, config?: RequestConfig): Promise<FetchKitResponse<T>>;
   extend(overrides: Partial<FetchKitConfig>): FetchKitInstance;
+  /**
+   * Subscribe to global API lifecycle events.
+   * Returns an unsubscribe function.
+   */
+  on(event: FetchKitEventType, handler: FetchKitEventHandler): () => void;
+  /**
+   * Unsubscribe from global API lifecycle events.
+   */
+  off(event: FetchKitEventType, handler: FetchKitEventHandler): void;
 }

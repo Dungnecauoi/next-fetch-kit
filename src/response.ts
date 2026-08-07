@@ -39,7 +39,14 @@ export async function parseResponse<T>(
     throw await FetchKitError.fromResponse(response, config);
   }
 
-  const data = await parseBody<T>(response, config);
+  let data = await parseBody<T>(response, config);
+
+  // Apply transformResponse if configured
+  const transformResponse =
+    config?.requestConfig.transformResponse ?? config?.instanceConfig.transformResponse;
+  if (transformResponse && data !== undefined) {
+    data = transformResponse(data) as Awaited<T>;
+  }
 
   return {
     data,

@@ -393,6 +393,65 @@ await api.get('/users', {
 });
 ```
 
+### In-flight Request Deduplication (`dedupe`)
+
+Tự động gộp các request `GET`/`HEAD` trùng lặp đang chạy đồng thời từ nhiều UI component thành 1 network request duy nhất:
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  dedupe: true, // Mặc định bật tự động gộp request trùng lặp
+});
+
+// Component Header và Sidebar gọi cùng 1 lúc → Chỉ có 1 HTTP request gửi đến server!
+const [user1, user2] = await Promise.all([
+  api.get('/me'),
+  api.get('/me'),
+]);
+```
+
+### Global Event Emitter (`api.on()` / `api.off()`)
+
+Đăng ký lắng nghe các sự kiện toàn cục từ React Context, Toast notification hoặc Auth Provider:
+
+```typescript
+// Lắng nghe tất cả lỗi HTTP / Network để bật Toast
+const unsubscribe = api.on('error', (error) => {
+  toast.error(error.message);
+});
+
+// Lắng nghe khi refresh token thất bại để chuyển hướng Đăng nhập
+api.on('auth:refresh-failed', () => {
+  window.location.href = '/login';
+});
+
+// Hủy đăng ký khi component unmount
+unsubscribe();
+```
+
+### Data Transformers (`transformRequest` & `transformResponse`)
+
+Tùy chỉnh định dạng dữ liệu trước khi gửi đi hoặc ngay sau khi nhận về:
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  transformResponse: (data) => convertSnakeToCamel(data),
+});
+```
+
+### Extended Params (`Set`, `Map`, `BigInt`)
+
+```typescript
+// Hỗ trợ truyền mượt mà Set, Map, BigInt trong URL params
+await api.get('/items', {
+  params: {
+    ids: new Set([1, 2, 3]),
+    bigCount: 9007199254740991n,
+  },
+});
+```
+
 ## API Reference
 
 ### `createFetchKit(config)`
@@ -409,8 +468,11 @@ await api.get('/users', {
 | `forwardCookies` | `boolean` | `false` | Tự động forward cookies trong SSR |
 | `auth` | `AuthConfig` | - | Auth & auto-refresh token config |
 | `fetch` | `typeof fetch` | `globalThis.fetch` | Custom fetch implementation |
+| `dedupe` | `boolean` | `true` | Tự động gộp các GET request trùng lặp đang running |
 | `validateStatus` | `(status: number) => boolean` | `200..299` | Custom status validator |
 | `ignoreResponseError` | `boolean` | `false` | Không throw HTTP error cho 4xx/5xx |
+| `transformRequest` | `(data: any) => any` | - | Hàm biến đổi request body trước khi gửi |
+| `transformResponse` | `(data: any) => any` | - | Hàm biến đổi response data sau khi parse |
 | `onRequest` | `HookOrArray<Function>` | - | Before-request hook (đơn hoặc mảng) |
 | `onResponse` | `HookOrArray<Function>` | - | After-response hook (đơn hoặc mảng) |
 | `onRequestError` | `HookOrArray<Function>` | - | Network error hook (đơn hoặc mảng) |
@@ -428,6 +490,8 @@ api.delete<T>(path, config?)  → Promise<FetchKitResponse<T>>
 api.head<T>(path, config?)    → Promise<FetchKitResponse<T>>
 api.options<T>(path, config?) → Promise<FetchKitResponse<T>>
 api.extend(overrides)         → FetchKitInstance
+api.on(event, handler)        → () => void (Unsubscribe fn)
+api.off(event, handler)       → void
 ```
 
 ### `FetchKitResponse<T>`

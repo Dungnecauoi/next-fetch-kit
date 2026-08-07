@@ -57,6 +57,15 @@ function buildParams(prefix: string, value: unknown, parts: string[], depth = 0)
     return;
   }
 
+  // Convert Set to Array
+  if (value instanceof Set) {
+    value = Array.from(value);
+  }
+  // Convert Map to Object
+  if (value instanceof Map) {
+    value = Object.fromEntries(value);
+  }
+
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
       const key = prefix ? `${prefix}[${i}]` : String(i);

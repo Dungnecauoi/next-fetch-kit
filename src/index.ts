@@ -17,4 +17,8 @@ export type {
   CookieStore,
   FetchKitErrorType,
   InterceptorHooks,
+  FetchKitEventType,
+  FetchKitEventHandler,
+  BeforeRetryDetails,
+  HookOrArray,
 } from './types';

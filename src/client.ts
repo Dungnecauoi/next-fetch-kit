@@ -8,6 +8,8 @@ import type {
   FetchKitResponse,
   RequestConfig,
   RequestContext,
+  FetchKitEventType,
+  FetchKitEventHandler,
 } from './types';
 import { buildRequestContext } from './request';
 import { parseResponse } from './response';
@@ -62,13 +64,69 @@ function createInstanceMethods(
   authManager: AuthManager | undefined,
   createRawInstance?: () => FetchKitInstance,
 ): FetchKitInstance {
+  // Event Listeners Map: event -> Set of handlers
+  const eventListeners = new Map<FetchKitEventType, Set<FetchKitEventHandler>>();
+
+  function emit(event: FetchKitEventType, payload: any) {
+    const handlers = eventListeners.get(event);
+    if (handlers) {
+      handlers.forEach((fn) => {
+        try {
+          fn(payload);
+        } catch {
+          // Prevent listener crashes from corrupting request execution
+        }
+      });
+    }
+  }
+
+  // In-flight GET/HEAD request deduplication cache
+  const inFlightCache = new Map<string, Promise<FetchKitResponse<any>>>();
+
+  /**
+   * Request dispatcher with optional in-flight deduplication.
+   */
+  function request<T>(
+    method: string,
+    path: string,
+    requestConfig: RequestConfig = {},
+    _isAuthRetry = false,
+  ): Promise<FetchKitResponse<T>> {
+    const methodUpper = method.toUpperCase();
+    const isDedupeEnabled = requestConfig.dedupe ?? config.dedupe ?? true;
+    const isDedupeable = isDedupeEnabled && (methodUpper === 'GET' || methodUpper === 'HEAD');
+
+    const dedupeKey = isDedupeable
+      ? `${methodUpper}:${path}:${JSON.stringify({
+          params: requestConfig.query ?? requestConfig.params ?? null,
+          cookies: requestConfig.cookies ?? null,
+          headers: requestConfig.headers ?? null,
+        })}`
+      : null;
+
+    if (dedupeKey && inFlightCache.has(dedupeKey)) {
+      return inFlightCache.get(dedupeKey) as Promise<FetchKitResponse<T>>;
+    }
+
+    const promise = executeRequest<T>(methodUpper, path, requestConfig, _isAuthRetry).finally(
+      () => {
+        if (dedupeKey) {
+          inFlightCache.delete(dedupeKey);
+        }
+      },
+    );
+
+    if (dedupeKey) {
+      inFlightCache.set(dedupeKey, promise);
+    }
+
+    return promise;
+  }
+
   /**
    * Core request execution pipeline.
-   *
-   * @param _isAuthRetry - Internal flag to prevent infinite auth refresh loops.
-   *   NOT exposed in public RequestConfig to prevent user tampering (BUG-1 fix).
    */
-  async function request<T>(
+  async function executeRequest<T>(
     method: string,
     path: string,
     requestConfig: RequestConfig = {},
@@ -90,6 +148,8 @@ function createInstanceMethods(
       if (config.onRequest) {
         context = await runRequestHooks(config.onRequest, context);
       }
+
+      emit('request', context);
 
       // Step 4: Determine retry config
       const retryConfig =
@@ -133,11 +193,14 @@ function createInstanceMethods(
           requestConfig,
           config,
           context,
+          emit,
         );
       }
 
       // Step 9: Parse response
       const response = await parseResponse<T>(rawResponse, context);
+
+      emit('response', response);
 
       // Step 10: Run onResponse hooks
       if (config.onResponse) {
@@ -166,8 +229,11 @@ function createInstanceMethods(
           requestConfig,
           config,
           context,
+          emit,
         );
       }
+
+      emit('error', fetchKitError);
 
       // Run error hooks
       if (fetchKitError.isHttpError() && config.onResponseError) {
@@ -198,6 +264,20 @@ function createInstanceMethods(
       const mergedConfig = mergeInstanceConfigs(config, overrides);
       return createFetchKit(mergedConfig);
     },
+
+    on(event: FetchKitEventType, handler: FetchKitEventHandler): () => void {
+      if (!eventListeners.has(event)) {
+        eventListeners.set(event, new Set());
+      }
+      eventListeners.get(event)!.add(handler);
+      return () => {
+        eventListeners.get(event)?.delete(handler);
+      };
+    },
+
+    off(event: FetchKitEventType, handler: FetchKitEventHandler): void {
+      eventListeners.get(event)?.delete(handler);
+    },
   };
 
   return instance;
@@ -215,11 +295,16 @@ async function handleAuthRefresh<T>(
   requestConfig: RequestConfig,
   config: FetchKitConfig,
   context: RequestContext,
+  emit?: (event: FetchKitEventType, payload: any) => void,
 ): Promise<FetchKitResponse<T>> {
   let retryContext: RequestContext | undefined;
   try {
     const rawInstance = createRawInstance();
     const newToken = await authManager.handleUnauthorized(rawInstance, context);
+
+    if (emit) {
+      emit('auth:refreshed', newToken);
+    }
 
     // Retry the original request — disable retry to prevent double-retry
     const retryRequestConfig: RequestConfig = {
@@ -264,6 +349,9 @@ async function handleAuthRefresh<T>(
 
     return response;
   } catch (refreshError) {
+    if (emit) {
+      emit('auth:refresh-failed', refreshError);
+    }
     // Run error hooks for the failed retry
     const errContext = retryContext ?? context;
     const fetchKitError = FetchKitError.from(refreshError, errContext);

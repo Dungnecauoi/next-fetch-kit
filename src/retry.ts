@@ -33,6 +33,7 @@ export async function withRetry(
   const {
     count,
     delay = 1000,
+    maxDelay = 30000,
     backoff = false,
     retryOn,
     methods = DEFAULT_RETRY_METHODS,
@@ -54,7 +55,7 @@ export async function withRetry(
       if (attempt < count && shouldRetryResponse(response.status, retryOn)) {
         const err = await FetchKitError.fromResponse(response.clone(), config);
         lastError = err;
-        const retryDelay = calculateDelay(delay, attempt, backoff);
+        const retryDelay = calculateDelay(delay, attempt, backoff, maxDelay);
         if (beforeRetry) {
           await beforeRetry({ attempt: attempt + 1, delay: retryDelay, error: err });
         }
@@ -77,7 +78,7 @@ export async function withRetry(
       // Check custom retry condition
       if (!shouldRetryError(error, retryOn)) break;
 
-      const retryDelay = calculateDelay(delay, attempt, backoff);
+      const retryDelay = calculateDelay(delay, attempt, backoff, maxDelay);
       if (beforeRetry) {
         const errShape =
           error instanceof FetchKitError
@@ -132,12 +133,17 @@ function shouldRetryError(
   return error instanceof TypeError;
 }
 
-function calculateDelay(baseDelay: number, attempt: number, backoff: boolean): number {
-  if (!backoff) return baseDelay;
+function calculateDelay(
+  baseDelay: number,
+  attempt: number,
+  backoff: boolean,
+  maxDelay = 30000,
+): number {
+  if (!backoff) return Math.min(baseDelay, maxDelay);
   // Exponential backoff with jitter
   const exponential = baseDelay * Math.pow(2, attempt);
   const jitter = exponential * 0.1 * Math.random();
-  return exponential + jitter;
+  return Math.min(exponential + jitter, maxDelay);
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
