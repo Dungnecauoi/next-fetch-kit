@@ -134,3 +134,26 @@ export class FetchKitError extends Error {
     );
   }
 }
+
+/**
+ * Type guard helper to check if an unknown error is a FetchKitError.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await api.get('/users');
+ * } catch (err) {
+ *   if (isFetchKitError(err)) {
+ *     console.log(err.status, err.type);
+ *   }
+ * }
+ * ```
+ */
+export function isFetchKitError(error: unknown): error is FetchKitError {
+  return error instanceof FetchKitError || (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Record<string, unknown>).name === 'FetchKitError' &&
+    typeof (error as Record<string, unknown>).type === 'string'
+  );
+}

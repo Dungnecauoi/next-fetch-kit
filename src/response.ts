@@ -43,13 +43,30 @@ export async function parseResponse<T>(
 
 async function parseBody<T>(response: Response, config?: RequestContext): Promise<T> {
   // No content
-  if (response.status === 204 || response.headers.get('content-length') === '0') {
+  if (response.status === 204 || response.status === 205 || response.headers.get('content-length') === '0') {
     return undefined as T;
   }
 
-  const contentType = response.headers.get('content-type') || '';
+  const responseType = config?.requestConfig.responseType || config?.instanceConfig.responseType;
 
   try {
+    // Explicit responseType overrides auto-detection
+    if (responseType === 'json') {
+      return (await response.json()) as T;
+    }
+    if (responseType === 'text') {
+      return (await response.text()) as unknown as T;
+    }
+    if (responseType === 'blob') {
+      return (await response.blob()) as unknown as T;
+    }
+    if (responseType === 'arrayBuffer') {
+      return (await response.arrayBuffer()) as unknown as T;
+    }
+
+    // Auto-detection logic
+    const contentType = response.headers.get('content-type') || '';
+
     // JSON
     if (contentType.includes('application/json') || contentType.includes('+json')) {
       return (await response.json()) as T;

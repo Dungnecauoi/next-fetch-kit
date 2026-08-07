@@ -186,4 +186,92 @@ describe('auth — auto refresh token', () => {
       expect(data.token).toBe('Bearer async-token');
     });
   });
+
+  describe('edge cases & infinite loop protection', () => {
+    it('prevents infinite 401 loop when retried request STILL receives 401', async () => {
+      let refreshAttempts = 0;
+
+      // Endpoint ALWAYS returns 401 even with new token (e.g. account banned)
+      server.use(
+        http.get('https://api.test.com/banned-user', () => {
+          return HttpResponse.json({ message: 'User banned' }, { status: 401 });
+        }),
+      );
+
+      const api = createFetchKit({
+        baseURL: 'https://api.test.com',
+        auth: {
+          getToken: () => 'token-1',
+          refresh: async (kit) => {
+            refreshAttempts++;
+            return 'token-2';
+          },
+        },
+      });
+
+      // Must throw 401 and MUST NOT call refresh more than once
+      await expect(api.get('/banned-user')).rejects.toThrow();
+      expect(refreshAttempts).toBe(1);
+    });
+
+    it('handles heavy load: 10 concurrent 401 requests with 1 refresh call', async () => {
+      let refreshAttempts = 0;
+
+      server.use(
+        http.get('https://api.test.com/heavy-load', ({ request }) => {
+          const auth = request.headers.get('Authorization');
+          if (auth !== 'Bearer fresh-token-10') {
+            return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 });
+          }
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      let currentToken = 'old-token';
+      const api = createFetchKit({
+        baseURL: 'https://api.test.com',
+        auth: {
+          getToken: () => currentToken,
+          refresh: async () => {
+            refreshAttempts++;
+            await new Promise((r) => setTimeout(r, 20));
+            currentToken = 'fresh-token-10';
+            return currentToken;
+          },
+        },
+      });
+
+      const promises = Array.from({ length: 10 }, () => api.get('/heavy-load'));
+      const results = await Promise.all(promises);
+
+      expect(results).toHaveLength(10);
+      expect(refreshAttempts).toBe(1);
+    });
+
+    it('rejects all queued requests when refresh throws an error', async () => {
+      server.use(
+        http.get('https://api.test.com/fail-queue', () => {
+          return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 });
+        }),
+      );
+
+      const api = createFetchKit({
+        baseURL: 'https://api.test.com',
+        auth: {
+          getToken: () => 'old',
+          refresh: async () => {
+            throw new Error('Refresh server crashed');
+          },
+        },
+      });
+
+      const promises = [
+        api.get('/fail-queue'),
+        api.get('/fail-queue'),
+        api.get('/fail-queue'),
+      ];
+
+      await expect(Promise.all(promises)).rejects.toThrow('Refresh server crashed');
+    });
+  });
 });

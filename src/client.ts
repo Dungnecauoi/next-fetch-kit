@@ -70,34 +70,36 @@ function createInstanceMethods(
     path: string,
     requestConfig: RequestConfig = {},
   ): Promise<FetchKitResponse<T>> {
-    // Step 1: Build request context
-    let context = await buildRequestContext(method, path, config, requestConfig);
-
-    // Step 2: Apply auth token
-    if (authManager) {
-      await authManager.applyToken(context.headers);
-    }
-
-    // Step 3: Run onRequest hook
-    if (config.onRequest) {
-      context = await config.onRequest(context);
-    }
-
-    // Step 4: Determine retry config
-    const retryConfig =
-      requestConfig.retry === false
-        ? undefined
-        : normalizeRetry(requestConfig.retry) ?? normalizeRetry(config.retry);
-
-    // Step 5: Determine timeout
-    const timeout = requestConfig.timeout ?? config.timeout;
+    let context: RequestContext | undefined;
 
     try {
+      // Step 1: Build request context
+      context = await buildRequestContext(method, path, config, requestConfig);
+
+      // Step 2: Apply auth token
+      if (authManager) {
+        await authManager.applyToken(context.headers);
+      }
+
+      // Step 3: Run onRequest hook
+      if (config.onRequest) {
+        context = await config.onRequest(context);
+      }
+
+      // Step 4: Determine retry config
+      const retryConfig =
+        requestConfig.retry === false
+          ? undefined
+          : normalizeRetry(requestConfig.retry) ?? normalizeRetry(config.retry);
+
+      // Step 5: Determine timeout
+      const timeout = requestConfig.timeout ?? config.timeout;
+
       // Step 6: Execute with retry → timeout → fetch pipeline
       const rawResponse = await withRetry(
         () =>
           withTimeout(
-            (signal) => fetch(context.url, { ...context.init, signal }),
+            (signal) => fetch(context!.url, { ...context!.init, signal }),
             timeout,
             requestConfig.signal,
             context,
@@ -107,8 +109,13 @@ function createInstanceMethods(
         context,
       );
 
-      // Step 7: Check for 401 and attempt auth refresh
-      if (rawResponse.status === 401 && authManager?.hasRefresh() && createRawInstance) {
+      // Step 7: Check for 401 and attempt auth refresh (only once per request)
+      if (
+        rawResponse.status === 401 &&
+        !context.requestConfig._isAuthRetry &&
+        authManager?.hasRefresh() &&
+        createRawInstance
+      ) {
         return await handleAuthRefresh<T>(
           authManager,
           createRawInstance,
@@ -136,9 +143,15 @@ function createInstanceMethods(
       const fetchKitError = FetchKitError.from(error, context);
 
       // Handle 401 from error path (e.g., after parse throws HTTP error)
+      const isAuthRetry =
+        fetchKitError.config?.requestConfig?._isAuthRetry ||
+        context?.requestConfig?._isAuthRetry;
+
       if (
         fetchKitError.isHttpError() &&
         fetchKitError.status === 401 &&
+        context &&
+        !isAuthRetry &&
         authManager?.hasRefresh() &&
         createRawInstance
       ) {
@@ -158,6 +171,11 @@ function createInstanceMethods(
         await config.onResponseError(fetchKitError);
       } else if (!fetchKitError.isHttpError() && config.onRequestError) {
         await config.onRequestError(fetchKitError);
+      }
+
+      // Run universal onError hook if configured
+      if (config.onError) {
+        await config.onError(fetchKitError);
       }
 
       throw fetchKitError;
@@ -195,20 +213,20 @@ async function handleAuthRefresh<T>(
   config: FetchKitConfig,
   context: RequestContext,
 ): Promise<FetchKitResponse<T>> {
+  let retryContext: RequestContext | undefined;
   try {
     const rawInstance = createRawInstance();
     const newToken = await authManager.handleUnauthorized(rawInstance, context);
 
-    // Retry the original request
-    // For header-based auth: the new token will be applied by getToken() on retry
-    // For cookie-based auth: the cookie is already set by the refresh response
-    const retryConfig = { ...requestConfig };
-
-    // Disable retry for the retried request to prevent infinite loops
-    retryConfig.retry = false;
+    // Retry the original request with _isAuthRetry: true to prevent infinite loops
+    const retryConfig: RequestConfig = {
+      ...requestConfig,
+      retry: false,
+      _isAuthRetry: true,
+    };
 
     // Re-execute through the same pipeline (will call getToken() again for new token)
-    const retryContext = await buildRequestContext(method, path, config, retryConfig);
+    retryContext = await buildRequestContext(method, path, config, retryConfig);
 
     // Apply new token manually if header-based
     if (newToken) {
@@ -221,10 +239,14 @@ async function handleAuthRefresh<T>(
     const rawResponse = await fetch(retryContext.url, retryContext.init);
     return await parseResponse<T>(rawResponse, retryContext);
   } catch (refreshError) {
-    // Run error hooks for the original 401
-    const fetchKitError = FetchKitError.from(refreshError, context);
+    // Run error hooks for the failed retry
+    const errContext = retryContext ?? context;
+    const fetchKitError = FetchKitError.from(refreshError, errContext);
     if (config.onResponseError) {
       await config.onResponseError(fetchKitError);
+    }
+    if (config.onError) {
+      await config.onError(fetchKitError);
     }
     throw fetchKitError;
   }

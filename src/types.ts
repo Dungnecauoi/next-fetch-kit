@@ -102,6 +102,12 @@ export interface InterceptorHooks {
    * Called when a response has an HTTP error status (4xx, 5xx).
    */
   onResponseError?: (error: FetchKitErrorInstance) => void | Promise<void>;
+
+  /**
+   * Universal error handler called for ALL errors (HTTP errors, network errors, timeouts, aborts).
+   * Useful for global toast notifications or centralized logging.
+   */
+  onError?: (error: FetchKitErrorInstance) => void | Promise<void>;
 }
 
 /**
@@ -136,6 +142,12 @@ export interface FetchKitConfig extends InterceptorHooks {
 
   /** Default cache mode */
   cache?: RequestCache;
+
+  /**
+   * Explicit response type parsing mode.
+   * Default: auto-detect JSON, text, or blob.
+   */
+  responseType?: 'json' | 'text' | 'blob' | 'arrayBuffer';
 
   /**
    * Auto-forward cookies from Next.js server context (SSR).
@@ -177,6 +189,12 @@ export interface RequestConfig {
   /** Cache mode for this request */
   cache?: RequestCache;
 
+  /**
+   * Explicit response type parsing mode.
+   * Default: auto-detect JSON, text, or blob.
+   */
+  responseType?: 'json' | 'text' | 'blob' | 'arrayBuffer';
+
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
 
@@ -186,6 +204,9 @@ export interface RequestConfig {
    * Pass the result of cookies() from next/headers.
    */
   cookies?: CookieStore | string;
+
+  /** Internal flag to prevent infinite auth refresh loops */
+  _isAuthRetry?: boolean;
 }
 
 /**

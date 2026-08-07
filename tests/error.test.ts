@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FetchKitError } from '../src/error';
+import { FetchKitError, isFetchKitError } from '../src/error';
 
 describe('FetchKitError', () => {
   it('creates an error with type and message', () => {
@@ -114,6 +114,29 @@ describe('FetchKitError', () => {
 
       const error = await FetchKitError.fromResponse(response);
       expect(error.status).toBe(502);
+    });
+  });
+
+  describe('isFetchKitError() type guard', () => {
+    it('returns true for FetchKitError instances', () => {
+      const err = new FetchKitError('Test', { type: 'http', status: 400 });
+      expect(isFetchKitError(err)).toBe(true);
+    });
+
+    it('returns true for duck-typed FetchKitError objects', () => {
+      const mockErr = { name: 'FetchKitError', type: 'network', message: 'Fail' };
+      expect(isFetchKitError(mockErr)).toBe(true);
+    });
+
+    it('returns false for standard Error', () => {
+      expect(isFetchKitError(new Error('Standard'))).toBe(false);
+    });
+
+    it('returns false for null, undefined, primitives', () => {
+      expect(isFetchKitError(null)).toBe(false);
+      expect(isFetchKitError(undefined)).toBe(false);
+      expect(isFetchKitError('string')).toBe(false);
+      expect(isFetchKitError(123)).toBe(false);
     });
   });
 });

@@ -114,4 +114,53 @@ describe('interceptors (hooks)', () => {
     await expect(api.get('/error/500')).rejects.toThrow();
     expect(onRequestError).not.toHaveBeenCalled();
   });
+
+  describe('universal onError hook', () => {
+    it('onError is called for HTTP errors', async () => {
+      const onError = vi.fn();
+
+      const api = createFetchKit({
+        baseURL: 'https://api.test.com',
+        onError,
+      });
+
+      await expect(api.get('/error/400')).rejects.toThrow();
+      expect(onError).toHaveBeenCalledOnce();
+      expect(onError.mock.calls[0][0].status).toBe(400);
+    });
+
+    it('onError is called for network errors', async () => {
+      const onError = vi.fn();
+
+      server.use(
+        http.get('https://api.test.com/net-err', () => {
+          return HttpResponse.error();
+        }),
+      );
+
+      const api = createFetchKit({
+        baseURL: 'https://api.test.com',
+        onError,
+      });
+
+      await expect(api.get('/net-err')).rejects.toThrow();
+      expect(onError).toHaveBeenCalledOnce();
+      expect(onError.mock.calls[0][0].isNetworkError()).toBe(true);
+    });
+
+    it('onRequest throwing error stops pipeline and triggers onError', async () => {
+      const onError = vi.fn();
+
+      const api = createFetchKit({
+        baseURL: 'https://api.test.com',
+        onRequest() {
+          throw new Error('Canceled in onRequest');
+        },
+        onError,
+      });
+
+      await expect(api.get('/users')).rejects.toThrow('Canceled in onRequest');
+      expect(onError).toHaveBeenCalledOnce();
+    });
+  });
 });

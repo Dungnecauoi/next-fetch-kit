@@ -44,4 +44,19 @@ export declare class FetchKitError extends Error {
      */
     static fromResponse(response: Response, config?: RequestContext): Promise<FetchKitError>;
 }
+/**
+ * Type guard helper to check if an unknown error is a FetchKitError.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await api.get('/users');
+ * } catch (err) {
+ *   if (isFetchKitError(err)) {
+ *     console.log(err.status, err.type);
+ *   }
+ * }
+ * ```
+ */
+export declare function isFetchKitError(error: unknown): error is FetchKitError;
 //# sourceMappingURL=error.d.ts.map

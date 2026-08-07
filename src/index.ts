@@ -3,7 +3,7 @@
 // ============================================================================
 
 export { createFetchKit } from './client';
-export { FetchKitError } from './error';
+export { FetchKitError, isFetchKitError } from './error';
 
 export type {
   FetchKitConfig,

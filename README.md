@@ -132,7 +132,21 @@ await api.get('/search', {
 });
 ```
 
-### Interceptors (Hooks)
+### Explicit Response Format (`responseType`)
+
+```typescript
+// Download file as ArrayBuffer
+const { data } = await api.get<ArrayBuffer>('/report.pdf', {
+  responseType: 'arrayBuffer', // 'json' | 'text' | 'blob' | 'arrayBuffer'
+});
+
+// Download image as Blob
+const { data } = await api.get<Blob>('/avatar.jpg', {
+  responseType: 'blob',
+});
+```
+
+### Interceptors (Hooks) & Global `onError`
 
 ```typescript
 const api = createFetchKit({
@@ -148,14 +162,9 @@ const api = createFetchKit({
     return response;
   },
 
-  onRequestError(error) {
-    console.error('Network error:', error.message);
-  },
-
-  onResponseError(error) {
-    if (error.status === 403) {
-      console.error('Forbidden!');
-    }
+  // Universal error handler (HTTP errors, network errors, timeouts, aborts)
+  onError(error) {
+    toast.error(error.message);
   },
 });
 ```
@@ -299,12 +308,12 @@ controller.abort();
 All errors are instances of `FetchKitError` with helpful properties:
 
 ```typescript
-import { FetchKitError } from 'next-fetch-kit';
+import { FetchKitError, isFetchKitError } from 'next-fetch-kit';
 
 try {
   await api.get('/endpoint');
 } catch (error) {
-  if (error instanceof FetchKitError) {
+  if (isFetchKitError(error)) {
     error.type;       // 'http' | 'network' | 'timeout' | 'abort' | 'parse'
     error.status;     // 404, 500, etc.
     error.data;       // Parsed response body

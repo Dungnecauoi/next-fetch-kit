@@ -47,9 +47,20 @@ describe('serializeParams', () => {
     expect(serializeParams({})).toBe('');
   });
 
-  it('handles deeply nested objects', () => {
-    const result = serializeParams({ a: { b: { c: 'deep' } } });
-    expect(result).toContain('deep');
+  it('handles deeply nested objects (4 levels)', () => {
+    const result = serializeParams({ a: { b: { c: { d: 'deep' } } } });
+    expect(result).toBe('a%5Bb%5D%5Bc%5D%5Bd%5D=deep');
+  });
+
+  it('handles array of objects', () => {
+    const result = serializeParams({ users: [{ name: 'Alice' }, { name: 'Bob' }] });
+    expect(result).toContain('users%5B0%5D%5Bname%5D=Alice');
+    expect(result).toContain('users%5B1%5D%5Bname%5D=Bob');
+  });
+
+  it('handles empty object property gracefully', () => {
+    const result = serializeParams({ filter: {} });
+    expect(result).toBe('');
   });
 });
 
