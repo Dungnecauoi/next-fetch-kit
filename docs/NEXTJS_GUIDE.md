@@ -4,6 +4,16 @@ This guide covers recommended patterns for using `next-fetch-kit` in **Next.js 1
 
 ---
 
+## Compatibility Overview
+
+`next-fetch-kit` is built specifically for Next.js and supports:
+- **Next.js 15.x**: Native async `await cookies()` and `await headers()` support.
+- **Next.js 14.x**: Full Server Components (RSC), Route Handlers, Server Actions & Client Components support.
+- **Next.js 13.x**: App Router & Pages Router support.
+- **React 18 & React 19**: Full compatibility.
+
+---
+
 ## Architecture Overview
 
 In Next.js App Router, code executes in two distinct environments:

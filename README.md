@@ -6,6 +6,21 @@ A lightweight (~4.5KB gzipped), type-safe `fetch` wrapper for **Next.js** — de
 
 ---
 
+## 🎯 Compatibility Matrix
+
+`next-fetch-kit` is designed and tested for all modern versions of Next.js:
+
+| Framework / Version | App Router (Server Components & Actions) | Pages Router | Minimum Node.js | Status |
+|:---|:---:|:---:|:---:|:---:|
+| **Next.js 15.x** (Latest) | ✅ Fully Supported | ✅ Supported | Node >= 18.18 | 🟢 Verified |
+| **Next.js 14.x** | ✅ Fully Supported | ✅ Supported | Node >= 18.17 | 🟢 Verified |
+| **Next.js 13.x** | ✅ Fully Supported | ✅ Supported | Node >= 16.14 | 🟢 Verified |
+| **React 18 & React 19** | ✅ Fully Supported | ✅ Supported | - | 🟢 Verified |
+
+> 💡 **Next.js 15 Ready**: Supports both synchronous and async `await cookies()` / `await headers()` from `next/headers` natively without any extra wrapper code.
+
+---
+
 ## ⚡ Why next-fetch-kit?
 
 - **SSR + CSR Native**: Full compatibility with Next.js App Router (Server Components & Client Components).
