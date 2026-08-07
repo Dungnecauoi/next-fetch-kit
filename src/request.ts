@@ -5,7 +5,7 @@
 import type { FetchKitConfig, RequestConfig, RequestContext, NextOptions } from './types';
 import { mergeConfigs } from './merge';
 import { appendParams } from './params';
-import { resolveCookieHeader } from './cookies';
+import { resolveCookieHeader, isServer, getNextServerOrigin } from './cookies';
 
 /**
  * Build a complete RequestContext from instance config + per-request config.
@@ -29,7 +29,14 @@ export async function buildRequestContext(
   const params = requestConfig.query ?? requestConfig.params;
   const baseURL = (instanceConfig.baseURL || '').replace(/\/+$/, '');
   const normalizedPath = path.startsWith('/') || path.startsWith('http') ? path : `/${path}`;
-  const fullPath = path.startsWith('http') ? path : `${baseURL}${normalizedPath}`;
+  let fullPath = path.startsWith('http') ? path : `${baseURL}${normalizedPath}`;
+
+  // Automatically resolve relative URLs on Server side (SSR) using next/headers host or fallback
+  if (isServer() && !fullPath.startsWith('http://') && !fullPath.startsWith('https://')) {
+    const origin = await getNextServerOrigin();
+    fullPath = `${origin}${fullPath.startsWith('/') ? '' : '/'}${fullPath}`;
+  }
+
   const url = appendParams(fullPath, params);
 
   // Build headers

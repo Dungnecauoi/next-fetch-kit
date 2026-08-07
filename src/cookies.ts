@@ -77,18 +77,31 @@ async function getNextCookies(): Promise<string | undefined> {
     const cookieStore = await mod.cookies();
     return serializeCookieStore(cookieStore);
   } catch {
-    // next/headers not available or called outside of RSC/Route Handler context
-    if (typeof globalThis !== 'undefined' && (globalThis as Record<string, unknown>).process) {
-      const env = ((globalThis as Record<string, unknown>).process as Record<string, unknown>).env as Record<string, string> | undefined;
-      if (env?.NODE_ENV === 'development') {
-        // eslint-disable-next-line no-console
-        console.warn(
-          '[next-fetch-kit] forwardCookies is enabled but cookies() from next/headers ' +
-            'is not available. This is expected if running outside of a Server Component, ' +
-            'Route Handler, or Middleware context.',
-        );
-      }
-    }
+    // Quietly return undefined if cookies() is not available or called outside active request context
     return undefined;
   }
 }
+
+/**
+ * Dynamically import next/headers and read request host to resolve relative URLs in SSR.
+ */
+export async function getNextServerOrigin(): Promise<string> {
+  try {
+    const mod = await (Function('return import("next/headers")')() as Promise<{
+      headers: () => Promise<Headers | { get: (key: string) => string | null }>;
+    }>);
+    const headerStore = await mod.headers();
+    const host = typeof headerStore.get === 'function' ? headerStore.get('host') : null;
+    const proto = (typeof headerStore.get === 'function' ? headerStore.get('x-forwarded-proto') : null) || 'http';
+    if (host) {
+      return `${proto}://${host}`;
+    }
+  } catch {
+    // next/headers not available or outside RSC context
+  }
+
+  const proc = (globalThis as unknown as { process?: { env?: Record<string, string> } }).process;
+  const port = proc?.env?.PORT || '3000';
+  return `http://localhost:${port}`;
+}
+

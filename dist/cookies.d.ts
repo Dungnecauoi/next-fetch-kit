@@ -16,4 +16,8 @@ export declare function isServer(): boolean;
  * @returns Cookie header string or undefined
  */
 export declare function resolveCookieHeader(instanceConfig: FetchKitConfig, requestConfig: RequestConfig): Promise<string | undefined>;
+/**
+ * Dynamically import next/headers and read request host to resolve relative URLs in SSR.
+ */
+export declare function getNextServerOrigin(): Promise<string>;
 //# sourceMappingURL=cookies.d.ts.map
