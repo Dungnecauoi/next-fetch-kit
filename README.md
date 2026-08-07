@@ -1,21 +1,28 @@
 # next-fetch-kit
 
-A lightweight, type-safe `fetch` wrapper for **Next.js** — works in both SSR and CSR with built-in auth refresh & cookie forwarding.
+A lightweight (~4.5KB gzipped), type-safe `fetch` wrapper for **Next.js** — designed for seamless operation in both **SSR (Server Components, Route Handlers, Middleware)** and **CSR (Client Components)** with built-in auth refresh queue, request deduplication, event bus, and SSR cookie forwarding.
 
 [![npm version](https://img.shields.io/npm/v/next-fetch-kit.svg)](https://www.npmjs.com/package/next-fetch-kit)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/next-fetch-kit)](https://bundlephobia.com/package/next-fetch-kit)
 [![license](https://img.shields.io/npm/l/next-fetch-kit.svg)](https://opensource.org/licenses/MIT)
 
-## Why next-fetch-kit?
+---
+
+## ⚡ Why next-fetch-kit?
 
 - **SSR + CSR Native**: Full compatibility with Next.js App Router (Server Components & Client Components).
+- **In-flight Request Deduplication**: Merges simultaneous identical `GET`/`HEAD` requests across React components into 1 network call.
 - **Next.js Revalidation & Cache**: Native `revalidate`, `tags`, and `cache` pass-through options.
-- **Auto Cookie Forwarding**: Automatically forwards cookies from `next/headers` during SSR.
-- **Auto Auth Refresh (401)**: Built-in token refresh queue for header & httpOnly cookie authentication patterns.
-- **Ultra Lightweight**: Zero dependencies, ~4KB gzipped.
-- **Full Type Safety**: Written 100% in TypeScript.
+- **Auto Cookie Forwarding (SSR)**: Automatically forwards cookies from `next/headers` during SSR rendering.
+- **Auto Auth Refresh (401)**: Built-in token refresh queue for Header & httpOnly Cookie authentication patterns without race conditions.
+- **Global Event Bus (`api.on`)**: Easily subscribe to global API events (`request`, `response`, `error`, `auth:refreshed`, `auth:refresh-failed`).
+- **Hook Chaining (Interceptors)**: Pass a single function or an array of middleware functions for request/response pipelines.
+- **Ultra Lightweight**: Zero dependencies, ~4.5KB gzipped.
+- **Full Type Safety**: Written 100% in TypeScript with strict null checks and exported declarations.
 
-## Install
+---
+
+## 📦 Installation
 
 ### From GitHub (Recommended)
 
@@ -33,9 +40,9 @@ yarn add Dungnecauoi/next-fetch-kit
 bun add Dungnecauoi/next-fetch-kit
 ```
 
-Or via full Git HTTPS URL:
+Or via specific release tag:
 ```bash
-npm install git+https://github.com/Dungnecauoi/next-fetch-kit.git
+npm install Dungnecauoi/next-fetch-kit#v0.4.0
 ```
 
 ### From npm Registry
@@ -44,7 +51,9 @@ npm install git+https://github.com/Dungnecauoi/next-fetch-kit.git
 npm install next-fetch-kit
 ```
 
-## Quick Start
+---
+
+## 🚀 Quick Start
 
 ```typescript
 import { createFetchKit } from 'next-fetch-kit';
@@ -55,31 +64,52 @@ const api = createFetchKit({
   timeout: 10000,
 });
 
-// GET
+// GET Request
 const { data, status } = await api.get<User[]>('/users');
 
-// POST
+// POST Request
 const { data } = await api.post<User>('/users', {
-  body: { name: 'John', email: 'john@example.com' },
+  body: { name: 'Alice', email: 'alice@example.com' },
 });
 
 // PUT, PATCH, DELETE
-await api.put<User>('/users/1', { body: { name: 'Jane' } });
-await api.patch<User>('/users/1', { body: { name: 'Jane' } });
+await api.put<User>('/users/1', { body: { name: 'Bob' } });
+await api.patch<User>('/users/1', { body: { name: 'Bob' } });
 await api.delete('/users/1');
 ```
 
-## Features
+---
 
-### Next.js Cache Integration
+## 🔥 Features & Usage Guide
+
+### 1. In-flight Request Deduplication (`dedupe`)
+
+Automatically merges identical simultaneous `GET`/`HEAD` requests fired at the same tick from different UI components (e.g. `Header`, `Sidebar`, `Profile`) into 1 network call.
 
 ```typescript
-// ISR — revalidate every 60 seconds
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  dedupe: true, // Enabled by default
+});
+
+// Component A and Component B call this simultaneously → Only 1 HTTP request is sent!
+const [user1, user2] = await Promise.all([
+  api.get('/me'),
+  api.get('/me'),
+]);
+```
+
+### 2. Next.js Cache & Revalidation (App Router)
+
+Pass native Next.js cache and revalidation parameters directly:
+
+```typescript
+// ISR — revalidate every 60 seconds with cache tags
 const { data } = await api.get<Product[]>('/products', {
   next: { revalidate: 60, tags: ['products'] },
 });
 
-// No cache
+// Disable cache (SSR fresh fetch)
 const { data } = await api.get<User>('/me', {
   cache: 'no-store',
 });
@@ -90,86 +120,11 @@ const { data } = await api.get<Config>('/config', {
 });
 ```
 
-### Auto Retry
+### 3. SSR Cookie Forwarding (`forwardCookies`)
 
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  retry: { count: 3, delay: 1000, backoff: true },
-  // Or simply: retry: 3
-});
-```
+In Next.js Server Components, native `fetch` does not automatically forward incoming browser cookies to backend microservices. `next-fetch-kit` solves this automatically:
 
-By default, only idempotent methods (GET, HEAD, OPTIONS) are retried on 408, 429, 500, 502, 503, 504.
-
-### Timeout
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  timeout: 10000, // 10 seconds
-});
-
-// Per-request override
-await api.get('/slow', { timeout: 30000 });
-```
-
-### Query Params
-
-```typescript
-// GET /users?page=1&limit=20&sort=name
-await api.get('/users', {
-  params: { page: 1, limit: 20, sort: 'name' },
-});
-
-// Nested: GET /search?filter[status]=active&filter[role]=admin
-await api.get('/search', {
-  params: { filter: { status: 'active', role: 'admin' } },
-});
-```
-
-### Explicit Response Format (`responseType`)
-
-```typescript
-// Download file as ArrayBuffer
-const { data } = await api.get<ArrayBuffer>('/report.pdf', {
-  responseType: 'arrayBuffer', // 'json' | 'text' | 'blob' | 'arrayBuffer'
-});
-
-// Download image as Blob
-const { data } = await api.get<Blob>('/avatar.jpg', {
-  responseType: 'blob',
-});
-```
-
-### Interceptors (Hooks) & Global `onError`
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-
-  onRequest(config) {
-    config.headers.set('X-Request-Id', crypto.randomUUID());
-    return config;
-  },
-
-  onResponse(response) {
-    console.log(`[${response.status}] ${response.raw.url}`);
-    return response;
-  },
-
-  // Universal error handler (HTTP errors, network errors, timeouts, aborts)
-  onError(error) {
-    toast.error(error.message);
-  },
-});
-```
-
-### Cookie Forwarding (SSR)
-
-In Next.js Server Components, `fetch` doesn't automatically include browser cookies. `next-fetch-kit` solves this:
-
-**Option A: Auto-forward**
+**Option A: Global Auto-forwarding**
 ```typescript
 const api = createFetchKit({
   baseURL: 'https://api.example.com',
@@ -177,14 +132,14 @@ const api = createFetchKit({
   forwardCookies: true, // Auto-reads cookies() from next/headers in SSR
 });
 
-// Server Component — cookies are automatically forwarded
+// Server Component (RSC) — cookies are automatically forwarded
 export default async function Page() {
   const { data } = await api.get<User>('/me');
-  return <div>{data.name}</div>;
+  return <div>Welcome, {data.name}</div>;
 }
 ```
 
-**Option B: Per-request**
+**Option B: Explicit per-request**
 ```typescript
 import { cookies } from 'next/headers';
 
@@ -193,15 +148,15 @@ export default async function Page() {
   const { data } = await api.get<User>('/me', {
     cookies: cookieStore,
   });
-  return <div>{data.name}</div>;
+  return <div>Welcome, {data.name}</div>;
 }
 ```
 
-### Auto Refresh Token (401)
+### 4. Automatic Token Refresh Queue (401 Unauthorized)
 
-Automatically refreshes expired tokens with a queue mechanism to prevent race conditions.
+Handles 401 Unauthorized responses with an anti-race-condition request queue mechanism.
 
-**Header-based auth (Authorization header):**
+**Header-based Authentication (Authorization Bearer Token):**
 ```typescript
 const api = createFetchKit({
   baseURL: 'https://api.example.com',
@@ -209,6 +164,7 @@ const api = createFetchKit({
     getToken: () => localStorage.getItem('accessToken'),
 
     refresh: async (kit) => {
+      // Uses raw kit without auth interceptors to prevent refresh loops
       const { data } = await kit.post<{ accessToken: string }>('/auth/refresh', {
         body: { refreshToken: localStorage.getItem('refreshToken') },
       });
@@ -227,7 +183,7 @@ const api = createFetchKit({
 });
 ```
 
-**Cookie-based auth (httpOnly cookies):**
+**Cookie-based Authentication (httpOnly Cookies):**
 ```typescript
 const api = createFetchKit({
   baseURL: 'https://api.example.com',
@@ -235,7 +191,7 @@ const api = createFetchKit({
   auth: {
     refresh: async (kit) => {
       await kit.post('/auth/refresh');
-      // No return — server sets new httpOnly cookie automatically
+      // Server sets new httpOnly cookie on response
     },
     onRefreshFailed: () => {
       window.location.href = '/login';
@@ -256,7 +212,101 @@ Request A → 401
   │   └── Retry C with new token ✅
 ```
 
-### Extend Instance
+### 5. Global Event Bus (`api.on()` / `api.off()`)
+
+Subscribe to global API events from React Contexts, Toast containers, or Auth Providers:
+
+```typescript
+// Subscribe to global errors for Toast notifications
+const unsubscribe = api.on('error', (error) => {
+  toast.error(error.message);
+});
+
+// Subscribe to refresh failure for login redirection
+api.on('auth:refresh-failed', () => {
+  router.push('/login');
+});
+
+// Clean up listener when React component unmounts
+unsubscribe();
+```
+
+### 6. Interceptor Hook Chaining (Array of Functions)
+
+Pass a single function or an array of hook functions executed sequentially in order:
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  onRequest: [addAuthHeader, addTraceId, logRequest],
+  onResponse: [transformDates, logMetrics],
+});
+
+// Extending an instance appends child hooks to parent hooks
+const childApi = api.extend({
+  onRequest: [childSpecificHook],
+});
+```
+
+### 7. Custom Status Validation (`validateStatus` & `ignoreResponseError`)
+
+```typescript
+// Treat 4xx responses as valid responses (do not throw HTTP error)
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  validateStatus: (status) => status < 500,
+});
+
+// Shortcut: ignoreResponseError: true
+const { data, status } = await api.get('/users/999', {
+  ignoreResponseError: true,
+});
+```
+
+### 8. Retry Engine with Backoff & `maxDelay` Cap
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  retry: {
+    count: 3,
+    delay: 1000,
+    backoff: true,
+    maxDelay: 10000, // Caps delay at maximum 10 seconds
+    beforeRetry: ({ attempt, delay, error }) => {
+      console.log(`Retrying attempt ${attempt} after ${delay}ms due to ${error.message}`);
+    },
+  },
+});
+```
+
+### 9. Query Parameters (`params` / `query` & Extended Types)
+
+Supports `Set`, `Map`, `BigInt`, nested objects, and arrays out-of-the-box:
+
+```typescript
+await api.get('/items', {
+  query: {
+    page: 1,
+    limit: 20,
+    filter: { status: 'active' },
+    ids: new Set([10, 20, 30]),
+    bigCount: 9007199254740991n,
+  },
+});
+```
+
+### 10. Data Transformers (`transformRequest` & `transformResponse`)
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  transformResponse: (data) => convertSnakeToCamel(data),
+  transformRequest: (data) => convertCamelToSnake(data),
+});
+```
+
+### 11. Extend Instance
 
 ```typescript
 const baseApi = createFetchKit({
@@ -264,44 +314,28 @@ const baseApi = createFetchKit({
   timeout: 10000,
 });
 
-// Inherit all config + add Authorization header
-const authApi = baseApi.extend({
-  headers: { Authorization: `Bearer ${token}` },
-});
-
-// Inherit all config + change baseURL
-const adminApi = baseApi.extend({
-  baseURL: 'https://admin.example.com',
+// Inherit all base config + add custom headers
+const tenantApi = baseApi.extend({
+  headers: { 'X-Tenant-Id': 'tenant-123' },
 });
 ```
 
-### Upload Files
+### 12. File Upload (FormData)
 
 ```typescript
 const formData = new FormData();
-formData.append('file', file);
+formData.append('avatar', file);
 
-const { data } = await api.post<MediaResponse>('/upload', {
+const { data } = await api.post<UploadResponse>('/upload', {
   body: formData, // Content-Type auto-detected
 });
 ```
 
-### Abort Requests
+---
 
-```typescript
-const controller = new AbortController();
+## 🚨 Error Handling
 
-const promise = api.get('/slow', {
-  signal: controller.signal,
-});
-
-// Cancel anytime
-controller.abort();
-```
-
-## Error Handling
-
-All errors are instances of `FetchKitError` with helpful properties:
+All thrown errors are instances of `FetchKitError` with typed diagnostic properties:
 
 ```typescript
 import { FetchKitError, isFetchKitError } from 'next-fetch-kit';
@@ -310,174 +344,48 @@ try {
   await api.get('/endpoint');
 } catch (error) {
   if (isFetchKitError(error)) {
-    error.type;       // 'http' | 'network' | 'timeout' | 'abort' | 'parse'
-    error.status;     // 404, 500, etc.
-    error.data;       // Parsed response body
-    error.message;    // Human-readable message
+    console.log(error.type);    // 'http' | 'network' | 'timeout' | 'abort' | 'parse'
+    console.log(error.status);  // 404, 500, etc.
+    console.log(error.data);    // Parsed response body from server
+    console.log(error.message); // Human-readable message
 
     // Helper methods
-    error.isHttpError();    // true for 4xx/5xx
-    error.isTimeout();      // true for timeouts
-    error.isNetworkError(); // true for network failures
-    error.isAbort();        // true for aborted requests
+    if (error.isHttpError()) { /* 4xx or 5xx */ }
+    if (error.isTimeout()) { /* Request timed out */ }
+    if (error.isNetworkError()) { /* Network connection failed */ }
+    if (error.isAbort()) { /* Request aborted by AbortController */ }
   }
 }
 ```
 
-### Custom `fetch` Implementation
+---
 
-Ghi đè `fetch` gốc bằng custom implementation (rất hữu ích cho unit test, mock fetch, proxy, hoặc Edge Runtime):
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  fetch: customFetchImpl, // Ghi đè ở instance level
-});
-
-// Hoặc ghi đè ở per-request level
-await api.get('/users', { fetch: mockFetch });
-```
-
-### Hook Chaining (Array of Interceptors)
-
-Hỗ trợ mảng các hook functions chạy nối tiếp theo thứ tự (pipeline pattern):
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  // Mảng các request hooks
-  onRequest: [addAuthHeader, addTraceId, logRequest],
-  // Mảng các response hooks
-  onResponse: [transformDateStrings, logMetrics],
-});
-```
-
-### Custom Status Validation (`validateStatus` & `ignoreResponseError`)
-
-```typescript
-// validateStatus: Tùy chỉnh HTTP status nào được coi là thành công (không throw error)
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  validateStatus: (status) => status < 500, // 4xx không throw error, trả về data bình thường
-});
-
-// ignoreResponseError: Phím tắt không throw HTTP error cho bất kỳ status nào (4xx, 5xx)
-const { data, status } = await api.get('/users/999', {
-  ignoreResponseError: true,
-});
-```
-
-### `beforeRetry` Hook
-
-Lắng nghe trước mỗi lần thử lại (retry):
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  retry: {
-    count: 3,
-    delay: 1000,
-    beforeRetry: ({ attempt, delay, error }) => {
-      console.log(`Retrying attempt ${attempt} in ${delay}ms due to ${error.message}`);
-    },
-  },
-});
-```
-
-### Query Params Alias (`query` hoặc `params`)
-
-```typescript
-// Hỗ trợ cả query lẫn params
-await api.get('/users', {
-  query: { page: 1, limit: 20 }, // alias cho params
-});
-```
-
-### In-flight Request Deduplication (`dedupe`)
-
-Tự động gộp các request `GET`/`HEAD` trùng lặp đang chạy đồng thời từ nhiều UI component thành 1 network request duy nhất:
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  dedupe: true, // Mặc định bật tự động gộp request trùng lặp
-});
-
-// Component Header và Sidebar gọi cùng 1 lúc → Chỉ có 1 HTTP request gửi đến server!
-const [user1, user2] = await Promise.all([
-  api.get('/me'),
-  api.get('/me'),
-]);
-```
-
-### Global Event Emitter (`api.on()` / `api.off()`)
-
-Đăng ký lắng nghe các sự kiện toàn cục từ React Context, Toast notification hoặc Auth Provider:
-
-```typescript
-// Lắng nghe tất cả lỗi HTTP / Network để bật Toast
-const unsubscribe = api.on('error', (error) => {
-  toast.error(error.message);
-});
-
-// Lắng nghe khi refresh token thất bại để chuyển hướng Đăng nhập
-api.on('auth:refresh-failed', () => {
-  window.location.href = '/login';
-});
-
-// Hủy đăng ký khi component unmount
-unsubscribe();
-```
-
-### Data Transformers (`transformRequest` & `transformResponse`)
-
-Tùy chỉnh định dạng dữ liệu trước khi gửi đi hoặc ngay sau khi nhận về:
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  transformResponse: (data) => convertSnakeToCamel(data),
-});
-```
-
-### Extended Params (`Set`, `Map`, `BigInt`)
-
-```typescript
-// Hỗ trợ truyền mượt mà Set, Map, BigInt trong URL params
-await api.get('/items', {
-  params: {
-    ids: new Set([1, 2, 3]),
-    bigCount: 9007199254740991n,
-  },
-});
-```
-
-## API Reference
+## 📖 API Reference
 
 ### `createFetchKit(config)`
 
 | Option | Type | Default | Description |
 |:---|:---|:---|:---|
-| `baseURL` | `string` | `''` | Base URL cho tất cả requests |
+| `baseURL` | `string` | `''` | Base URL for all request paths |
 | `headers` | `HeadersInit` | `{}` | Default headers |
-| `credentials` | `RequestCredentials` | - | Credentials mode |
-| `timeout` | `number` | - | Timeout tính bằng ms |
-| `retry` | `RetryConfig \| number` | - | Retry configuration |
-| `next` | `NextOptions` | - | Next.js cache options |
-| `cache` | `RequestCache` | - | Cache mode |
-| `forwardCookies` | `boolean` | `false` | Tự động forward cookies trong SSR |
-| `auth` | `AuthConfig` | - | Auth & auto-refresh token config |
+| `credentials` | `RequestCredentials` | `'same-origin'` | Credentials mode |
+| `timeout` | `number` | `undefined` | Request timeout in milliseconds |
+| `retry` | `RetryConfig \| number` | `undefined` | Retry configuration |
+| `next` | `NextOptions` | `undefined` | Next.js cache revalidation options |
+| `cache` | `RequestCache` | `undefined` | Cache mode |
+| `forwardCookies` | `boolean` | `false` | Auto-forward cookies from `next/headers` in SSR |
+| `auth` | `AuthConfig` | `undefined` | Auth token management & refresh queue config |
 | `fetch` | `typeof fetch` | `globalThis.fetch` | Custom fetch implementation |
-| `dedupe` | `boolean` | `true` | Tự động gộp các GET request trùng lặp đang running |
-| `validateStatus` | `(status: number) => boolean` | `200..299` | Custom status validator |
-| `ignoreResponseError` | `boolean` | `false` | Không throw HTTP error cho 4xx/5xx |
-| `transformRequest` | `(data: any) => any` | - | Hàm biến đổi request body trước khi gửi |
-| `transformResponse` | `(data: any) => any` | - | Hàm biến đổi response data sau khi parse |
-| `onRequest` | `HookOrArray<Function>` | - | Before-request hook (đơn hoặc mảng) |
-| `onResponse` | `HookOrArray<Function>` | - | After-response hook (đơn hoặc mảng) |
-| `onRequestError` | `HookOrArray<Function>` | - | Network error hook (đơn hoặc mảng) |
-| `onResponseError` | `HookOrArray<Function>` | - | HTTP error hook (đơn hoặc mảng) |
-| `onError` | `HookOrArray<Function>` | - | Universal error hook (đơn hoặc mảng) |
+| `dedupe` | `boolean` | `true` | Auto-deduplicate in-flight GET/HEAD requests |
+| `validateStatus` | `(status: number) => boolean` | `200..299` | Custom status validator function |
+| `ignoreResponseError` | `boolean` | `false` | When true, disables HTTP error throwing |
+| `transformRequest` | `(data: any) => any` | `undefined` | Outbound request body transformer |
+| `transformResponse` | `(data: any) => any` | `undefined` | Inbound response data transformer |
+| `onRequest` | `HookOrArray<Function>` | `undefined` | Before-request hook(s) |
+| `onResponse` | `HookOrArray<Function>` | `undefined` | After-response hook(s) |
+| `onRequestError` | `HookOrArray<Function>` | `undefined` | Network error hook(s) |
+| `onResponseError` | `HookOrArray<Function>` | `undefined` | HTTP error hook(s) |
+| `onError` | `HookOrArray<Function>` | `undefined` | Universal error hook(s) |
 
 ### Instance Methods
 
@@ -490,22 +398,24 @@ api.delete<T>(path, config?)  → Promise<FetchKitResponse<T>>
 api.head<T>(path, config?)    → Promise<FetchKitResponse<T>>
 api.options<T>(path, config?) → Promise<FetchKitResponse<T>>
 api.extend(overrides)         → FetchKitInstance
-api.on(event, handler)        → () => void (Unsubscribe fn)
+api.on(event, handler)        → () => void (Unsubscribe function)
 api.off(event, handler)       → void
 ```
 
 ### `FetchKitResponse<T>`
 
 ```typescript
-{
+interface FetchKitResponse<T> {
   data: T;           // Parsed response body
   status: number;    // HTTP status code
   statusText: string;
-  headers: Headers;
-  raw: Response;     // Original Response object
+  headers: Headers;  // Response headers
+  raw: Response;     // Raw Response object
 }
 ```
 
-## License
+---
 
-MIT
+## 📄 License
+
+[MIT](./LICENSE) © Dungnecauoi
