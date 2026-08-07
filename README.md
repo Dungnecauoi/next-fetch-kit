@@ -22,16 +22,9 @@ A lightweight (~4.5KB gzipped), type-safe `fetch` wrapper for **Next.js** — de
 
 ## 📦 Installation
 
-### 1. From Local Path (Khi test/phát triển local)
+### From GitHub
 
-```bash
-# Trong dự án Next.js của bạn:
-npm install ../next-fetch-kit
-# hoặc đường dẫn tuyệt đối:
-npm install /Volumes/SSD-1/Code/lib-nextjs/next-fetch-kit
-```
-
-### 2. From GitHub
+Install directly from GitHub repository:
 
 ```bash
 # npm
@@ -42,9 +35,27 @@ pnpm add Dungnecauoi/next-fetch-kit
 
 # yarn
 yarn add Dungnecauoi/next-fetch-kit
+
+# bun
+bun add Dungnecauoi/next-fetch-kit
 ```
 
-> **Lưu ý:** Gói này hiện tại chưa được publish lên **npm registry**. Khi bạn sẵn sàng release, hãy chạy `npm publish` để mọi người có thể cài trực tiếp qua `npm install next-fetch-kit`.
+Or install a specific release version / branch:
+```bash
+npm install Dungnecauoi/next-fetch-kit#v0.4.0
+```
+
+### Local Development
+
+For local development and testing:
+
+```bash
+# Relative path from your Next.js project
+npm install ../next-fetch-kit
+
+# Or absolute path
+npm install /Volumes/SSD-1/Code/lib-nextjs/next-fetch-kit
+```
 
 ---
 
