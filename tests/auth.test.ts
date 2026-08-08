@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { server } from './setup';
 import { http, HttpResponse } from 'msw';
 import { createFetchKit } from '../src/client';
+import { createAuthManager } from '../src/auth';
 import { FetchKitError } from '../src/error';
 
 describe('auth — auto refresh token', () => {
@@ -20,8 +21,8 @@ describe('auth — auto refresh token', () => {
 
     it('auto refreshes on 401 and retries', async () => {
       let tokenValue = 'expired';
-      const onRefreshed = vi.fn((newToken: string) => {
-        tokenValue = newToken;
+      const onRefreshed = vi.fn((newToken?: string | void) => {
+        if (newToken) tokenValue = newToken;
       });
 
       const api = createFetchKit({
@@ -66,12 +67,39 @@ describe('auth — auto refresh token', () => {
       await expect(api.get('/me')).rejects.toThrow();
       expect(onRefreshFailed).toHaveBeenCalled();
     });
+
+    it('does not call applyToken when getToken returns null', async () => {
+      const api = createFetchKit({
+        baseURL: 'https://api.test.com',
+        auth: {
+          getToken: () => null,
+          refresh: async () => 'refreshed',
+        },
+      });
+
+      // GET /config does not require auth — should succeed with no auth header
+      const { data } = await api.get<{ theme: string }>('/config');
+      expect(data.theme).toBe('dark');
+    });
+
+    it('does not call applyToken when getToken returns undefined', async () => {
+      const api = createFetchKit({
+        baseURL: 'https://api.test.com',
+        auth: {
+          getToken: () => undefined,
+        },
+      });
+
+      const { data } = await api.get<{ theme: string }>('/config');
+      expect(data).toBeDefined();
+    });
   });
 
   describe('cookie-based auth', () => {
-    it('refreshes without returning token (cookie-based)', async () => {
-      // First call returns 401, then after refresh, returns success
+    it('refreshes without returning token (cookie-based) and onRefreshed is called', async () => {
       let callCount = 0;
+      const onRefreshed = vi.fn();
+
       server.use(
         http.get('https://api.test.com/cookie-me', () => {
           callCount++;
@@ -81,7 +109,6 @@ describe('auth — auto refresh token', () => {
           return HttpResponse.json({ name: 'Cookie User' });
         }),
         http.post('https://api.test.com/auth/refresh', () => {
-          // Server sets new httpOnly cookie in response
           return HttpResponse.json({ ok: true });
         }),
       );
@@ -94,12 +121,16 @@ describe('auth — auto refresh token', () => {
             await kit.post('/auth/refresh');
             // No return — cookie-based
           },
+          onRefreshed, // Must be called even for void/cookie-based refresh
         },
       });
 
       const { data } = await api.get<{ name: string }>('/cookie-me');
       expect(data.name).toBe('Cookie User');
       expect(callCount).toBe(2);
+      // onRefreshed should fire even when refresh returns void (cookie-based)
+      expect(onRefreshed).toHaveBeenCalledOnce();
+      expect(onRefreshed).toHaveBeenCalledWith(undefined);
     });
   });
 
@@ -119,7 +150,6 @@ describe('auth — auto refresh token', () => {
         }),
         http.post('https://api.test.com/auth/refresh', async () => {
           refreshCount++;
-          // Simulate slow refresh
           await new Promise((r) => setTimeout(r, 50));
           return HttpResponse.json({ accessToken: 'fresh-token' });
         }),
@@ -135,30 +165,25 @@ describe('auth — auto refresh token', () => {
             return data.accessToken;
           },
           onRefreshed: (newToken) => {
-            currentToken = newToken;
+            if (newToken) currentToken = newToken;
           },
         },
       });
 
-      // Fire 3 requests simultaneously
       const results = await Promise.all([
         api.get('/queue-test'),
         api.get('/queue-test'),
         api.get('/queue-test'),
       ]);
 
-      // All should succeed
       expect(results).toHaveLength(3);
-      // Refresh should have been called only once
       expect(refreshCount).toBe(1);
     });
   });
 
   describe('no auth config', () => {
     it('throws 401 error when no auth configured', async () => {
-      const api = createFetchKit({
-        baseURL: 'https://api.test.com',
-      });
+      const api = createFetchKit({ baseURL: 'https://api.test.com' });
 
       try {
         await api.get('/error/401');
@@ -191,7 +216,6 @@ describe('auth — auto refresh token', () => {
     it('prevents infinite 401 loop when retried request STILL receives 401', async () => {
       let refreshAttempts = 0;
 
-      // Endpoint ALWAYS returns 401 even with new token (e.g. account banned)
       server.use(
         http.get('https://api.test.com/banned-user', () => {
           return HttpResponse.json({ message: 'User banned' }, { status: 401 });
@@ -202,14 +226,13 @@ describe('auth — auto refresh token', () => {
         baseURL: 'https://api.test.com',
         auth: {
           getToken: () => 'token-1',
-          refresh: async (kit) => {
+          refresh: async () => {
             refreshAttempts++;
             return 'token-2';
           },
         },
       });
 
-      // Must throw 401 and MUST NOT call refresh more than once
       await expect(api.get('/banned-user')).rejects.toThrow();
       expect(refreshAttempts).toBe(1);
     });
@@ -272,6 +295,114 @@ describe('auth — auto refresh token', () => {
       ];
 
       await expect(Promise.all(promises)).rejects.toThrow('Refresh server crashed');
+    });
+  });
+
+  describe('createAuthManager() unit tests', () => {
+    it('hasRefresh() returns true when refresh is configured', () => {
+      const manager = createAuthManager({
+        refresh: async () => 'token',
+      });
+      expect(manager.hasRefresh()).toBe(true);
+    });
+
+    it('hasRefresh() returns false when refresh is NOT configured', () => {
+      const manager = createAuthManager({
+        getToken: () => 'some-token',
+      });
+      expect(manager.hasRefresh()).toBe(false);
+    });
+
+    it('reset() clears internal state', () => {
+      const manager = createAuthManager({
+        refresh: async () => 'token',
+      });
+      // Reset should not throw and should be idempotent
+      manager.reset();
+      manager.reset();
+      expect(manager.hasRefresh()).toBe(true);
+    });
+
+    it('applyToken() does nothing when getToken is not configured', async () => {
+      const manager = createAuthManager({
+        refresh: async () => 'token',
+      });
+      const headers = new Headers();
+      await manager.applyToken(headers);
+      expect(headers.has('Authorization')).toBe(false);
+    });
+
+    it('applyToken() does nothing when getToken returns null', async () => {
+      const manager = createAuthManager({
+        getToken: () => null,
+      });
+      const headers = new Headers();
+      await manager.applyToken(headers);
+      expect(headers.has('Authorization')).toBe(false);
+    });
+
+    it('applyToken() sets Authorization header when getToken returns a token', async () => {
+      const manager = createAuthManager({
+        getToken: () => 'my-secret-token',
+      });
+      const headers = new Headers();
+      await manager.applyToken(headers);
+      expect(headers.get('Authorization')).toBe('Bearer my-secret-token');
+    });
+
+    it('handleUnauthorized() rejects when no refresh handler is configured', async () => {
+      const manager = createAuthManager({
+        getToken: () => 'token',
+      });
+      const rawInstance = createFetchKit({ baseURL: 'https://api.test.com' });
+
+      await expect(manager.handleUnauthorized(rawInstance)).rejects.toThrow(
+        'Unauthorized (401)',
+      );
+    });
+
+    it('second call while refreshing is queued and resolves with same result', async () => {
+      let refreshCallCount = 0;
+
+      server.use(
+        http.post('https://api.test.com/auth/refresh', async () => {
+          refreshCallCount++;
+          await new Promise((r) => setTimeout(r, 30));
+          return HttpResponse.json({ accessToken: 'new-token' });
+        }),
+      );
+
+      let tokenValue = 'old';
+      const api = createFetchKit({
+        baseURL: 'https://api.test.com',
+        auth: {
+          getToken: () => tokenValue,
+          refresh: async (kit) => {
+            const { data } = await kit.post<{ accessToken: string }>('/auth/refresh');
+            tokenValue = data.accessToken;
+            return data.accessToken;
+          },
+        },
+      });
+
+      server.use(
+        http.get('https://api.test.com/guarded', ({ request }) => {
+          const auth = request.headers.get('Authorization');
+          if (!auth || auth === 'Bearer old') {
+            return HttpResponse.json({ msg: 'unauth' }, { status: 401 });
+          }
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const [r1, r2] = await Promise.all([
+        api.get('/guarded'),
+        api.get('/guarded'),
+      ]);
+
+      expect((r1.data as any).ok).toBe(true);
+      expect((r2.data as any).ok).toBe(true);
+      expect(refreshCallCount).toBe(1);
     });
   });
 });

@@ -22,21 +22,35 @@ export interface NextOptions {
 export type HookOrArray<T> = T | T[];
 
 /**
- * Event names supported by FetchKit event emitter.
+ * Typed map of all FetchKit event names to their payload types.
+ * Used to provide strict payload types in `api.on()` / `api.off()`.
  */
-export type FetchKitEventType =
-  | 'request'
-  | 'response'
-  | 'error'
-  | 'retry'
-  | 'auth:refreshed'
-  | 'auth:refresh-failed';
+export interface FetchKitEventMap {
+  /** Fired before each request is sent. Payload is the resolved request context. */
+  request: RequestContext;
+  /** Fired after a successful response is parsed. Payload is the FetchKitResponse. */
+  response: FetchKitResponse<unknown>;
+  /** Fired when any request error occurs (network, timeout, abort, http). */
+  error: FetchKitErrorInstance;
+  /** Fired before each retry attempt. Payload includes attempt number, delay, and error. */
+  retry: BeforeRetryDetails;
+  /** Fired after a successful token refresh. Payload is the new token string or void for cookie-based auth. */
+  'auth:refreshed': string | void;
+  /** Fired when token refresh fails. Payload is the thrown error. */
+  'auth:refresh-failed': unknown;
+}
 
 /**
- * Event handler function shape.
+ * Union of all supported event names.
  */
+export type FetchKitEventType = keyof FetchKitEventMap;
 
-export type FetchKitEventHandler = (payload: any) => void;
+/**
+ * Generic event handler function — payload is typed per event via FetchKitEventMap.
+ */
+export type FetchKitEventHandler<K extends FetchKitEventType = FetchKitEventType> = (
+  payload: FetchKitEventMap[K],
+) => void;
 
 /**
  * Details passed to the beforeRetry callback.
@@ -387,12 +401,16 @@ export interface FetchKitInstance {
   options<T = unknown>(path: string, config?: RequestConfig): Promise<FetchKitResponse<T>>;
   extend(overrides: Partial<FetchKitConfig>): FetchKitInstance;
   /**
-   * Subscribe to global API lifecycle events.
+   * Subscribe to a global API lifecycle event with a typed payload.
    * Returns an unsubscribe function.
+   *
+   * @example
+   * const unsub = api.on('error', (err) => console.error(err.message)); // err is FetchKitErrorInstance
+   * const unsub2 = api.on('auth:refreshed', (token) => saveToken(token)); // token is string | void
    */
-  on(event: FetchKitEventType, handler: FetchKitEventHandler): () => void;
+  on<K extends FetchKitEventType>(event: K, handler: FetchKitEventHandler<K>): () => void;
   /**
-   * Unsubscribe from global API lifecycle events.
+   * Unsubscribe from a global API lifecycle event.
    */
-  off(event: FetchKitEventType, handler: FetchKitEventHandler): void;
+  off<K extends FetchKitEventType>(event: K, handler: FetchKitEventHandler<K>): void;
 }

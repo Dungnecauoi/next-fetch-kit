@@ -1,7 +1,3 @@
-// ============================================================================
-// next-fetch-kit — Public API
-// ============================================================================
-
 export { createFetchKit } from './client';
 export { FetchKitError, isFetchKitError } from './error';
 
@@ -19,6 +15,7 @@ export type {
   InterceptorHooks,
   FetchKitEventType,
   FetchKitEventHandler,
+  FetchKitEventMap,
   BeforeRetryDetails,
   HookOrArray,
 } from './types';
