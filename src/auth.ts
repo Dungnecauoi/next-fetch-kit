@@ -75,8 +75,8 @@ export function createAuthManager(authConfig: AuthConfig) {
       try {
         const result = await authConfig.refresh(rawInstance);
 
-        // Notify onRefreshed callback
-        if (result && authConfig.onRefreshed) {
+        // Notify onRefreshed callback (works for both token string and cookie-based void returns)
+        if (authConfig.onRefreshed) {
           await authConfig.onRefreshed(result);
         }
 

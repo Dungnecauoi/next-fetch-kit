@@ -89,7 +89,7 @@ export interface AuthConfig {
      * Called after a successful token refresh.
      * Use this to persist the new token (e.g., localStorage, memory).
      */
-    onRefreshed?: (newToken: string) => void | Promise<void>;
+    onRefreshed?: (newToken?: string | void) => void | Promise<void>;
     /**
      * Called when refresh fails (e.g., refresh token expired).
      * Use this to logout, redirect to login page, etc.

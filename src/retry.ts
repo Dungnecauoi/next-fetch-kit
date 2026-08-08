@@ -157,8 +157,6 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       );
     }
 
-    const timer = setTimeout(resolve, ms);
-
     const onAbort = () => {
       clearTimeout(timer);
       reject(
@@ -168,6 +166,11 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
         }),
       );
     };
+
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
 
     signal?.addEventListener('abort', onAbort, { once: true });
   });
