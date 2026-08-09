@@ -164,6 +164,14 @@ function createInstanceMethods(
       const onUploadProgress = requestConfig.onUploadProgress ?? config.onUploadProgress;
       const onDownloadProgress = requestConfig.onDownloadProgress ?? config.onDownloadProgress;
 
+      if ((onUploadProgress || onDownloadProgress) && typeof XMLHttpRequest === 'undefined') {
+        if ((globalThis as any).process?.env?.NODE_ENV !== 'production') {
+          console.warn(
+            '[next-fetch-kit] Warning: "onUploadProgress" / "onDownloadProgress" is configured but running in a Server (SSR) environment where XMLHttpRequest is unavailable. Progress callbacks are disabled on the server.',
+          );
+        }
+      }
+
       const defaultFetch =
         onUploadProgress || onDownloadProgress
           ? (url: string, init?: RequestInit) =>

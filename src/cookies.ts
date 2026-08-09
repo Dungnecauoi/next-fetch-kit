@@ -33,8 +33,14 @@ export async function resolveCookieHeader(
   }
 
   // Priority 2: Global forwardCookies (SSR only)
-  if (instanceConfig.forwardCookies && isServer()) {
-    return await getNextCookies();
+  if (instanceConfig.forwardCookies) {
+    if (isServer()) {
+      return await getNextCookies();
+    } else if ((globalThis as any).process?.env?.NODE_ENV !== 'production') {
+      console.warn(
+        '[next-fetch-kit] Warning: "forwardCookies" is enabled but running in a Client (CSR) environment. Cookies are handled automatically by the browser via credentials mode.',
+      );
+    }
   }
 
   // Priority 3: No cookie header (CSR uses credentials)
