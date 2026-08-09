@@ -16,6 +16,7 @@ import { parseResponse } from './response';
 import { FetchKitError } from './error';
 import { withTimeout } from './timeout';
 import { type AuthManager } from './auth';
+import { xhrFetch } from './xhr';
 
 // ---------------------------------------------------------------------------
 // Hook Execution Helpers (Support single function or array of functions)
@@ -110,7 +111,16 @@ export async function handleAuthRefresh<T>(
 
     // Wrap retry fetch with timeout protection and custom fetch
     const timeout = requestConfig.timeout ?? config.timeout;
-    const fetchFn = requestConfig.fetch ?? config.fetch ?? globalThis.fetch;
+    const onUploadProgress = requestConfig.onUploadProgress ?? config.onUploadProgress;
+    const onDownloadProgress = requestConfig.onDownloadProgress ?? config.onDownloadProgress;
+
+    const defaultFetch =
+      onUploadProgress || onDownloadProgress
+        ? (url: string, init?: RequestInit) =>
+            xhrFetch(url, { ...init, onUploadProgress, onDownloadProgress })
+        : globalThis.fetch;
+
+    const fetchFn = requestConfig.fetch ?? config.fetch ?? defaultFetch;
 
     const rawResponse = await withTimeout(
       (signal) => fetchFn(retryContext!.url, { ...retryContext!.init, signal }),

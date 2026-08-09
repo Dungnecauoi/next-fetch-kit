@@ -1,5 +1,6 @@
 export { createFetchKit } from './client';
 export { FetchKitError, isFetchKitError } from './error';
+export { xhrFetch } from './xhr';
 
 export type {
   FetchKitConfig,
@@ -16,6 +17,8 @@ export type {
   FetchKitEventType,
   FetchKitEventHandler,
   FetchKitEventMap,
+  FetchKitProgress,
+  ProgressCallback,
   BeforeRetryDetails,
   HookOrArray,
 } from './types';

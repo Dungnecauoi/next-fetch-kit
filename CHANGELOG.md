@@ -4,6 +4,16 @@ All notable changes to `next-fetch-kit` are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-08-09
+
+### Added
+- **Upload & Download Progress Tracking (`onUploadProgress` / `onDownloadProgress`)** — Track real-time upload and download progress (percentage 0–100%, bytes `loaded`/`total`, transfer `rate` in B/s, and `estimated` time remaining in seconds).
+- **Smart Dynamic File MIME Type Detection** — Automatically detects and attaches exact MIME types for direct `File`/`Blob` uploads (`image/*`, `video/*`, `application/pdf`, `.docx`, `.xlsx`).
+- **Auto-FormData Conversion** — Passing plain JavaScript objects containing `File` or `Blob` instances automatically serializes into `FormData` with dynamic boundaries.
+- **`xhrFetch` Adapter** — Powered by `XMLHttpRequest` for progress tracking in browser environments while maintaining 100% `fetch()` compatibility.
+- **Exported types**: `FetchKitProgress`, `ProgressCallback`, `xhrFetch`.
+- **Test suite expansion**: Added `file-upload.test.ts` (8 tests) and `progress.test.ts` (4 tests) — total 304 tests passing.
+
 ---
 
 ## [0.4.1] — 2026-08-08

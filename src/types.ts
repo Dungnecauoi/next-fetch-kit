@@ -22,6 +22,27 @@ export interface NextOptions {
 export type HookOrArray<T> = T | T[];
 
 /**
+ * Progress details object passed to `onUploadProgress` and `onDownloadProgress` callbacks.
+ */
+export interface FetchKitProgress {
+  /** Bytes transferred so far */
+  loaded: number;
+  /** Total expected bytes (0 if Content-Length is missing or uncomputable) */
+  total: number;
+  /** Percentage completed from 0 to 100 (0 if total is 0) */
+  percentage: number;
+  /** Transfer rate in bytes per second */
+  rate?: number;
+  /** Estimated time remaining in seconds */
+  estimated?: number;
+}
+
+/**
+ * Progress callback function.
+ */
+export type ProgressCallback = (progress: FetchKitProgress) => void;
+
+/**
  * Typed map of all FetchKit event names to their payload types.
  * Used to provide strict payload types in `api.on()` / `api.off()`.
  */
@@ -166,6 +187,18 @@ export interface InterceptorHooks {
    * Useful for global toast notifications or centralized logging.
    */
   onError?: HookOrArray<(error: FetchKitErrorInstance) => void | Promise<void>>;
+
+  /**
+   * Callback to track upload progress (0-100%).
+   * Triggered during file/form data uploads.
+   */
+  onUploadProgress?: ProgressCallback;
+
+  /**
+   * Callback to track download progress (0-100%).
+   * Triggered during response downloading.
+   */
+  onDownloadProgress?: ProgressCallback;
 }
 
 /**
@@ -307,6 +340,16 @@ export interface RequestConfig {
    * Custom status validator function for this request.
    */
   validateStatus?: (status: number) => boolean;
+
+  /**
+   * Callback to track upload progress for this specific request.
+   */
+  onUploadProgress?: ProgressCallback;
+
+  /**
+   * Callback to track download progress for this specific request.
+   */
+  onDownloadProgress?: ProgressCallback;
 
   /**
    * When true, disables HTTP error throwing for 4xx/5xx status codes for this request.

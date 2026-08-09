@@ -116,6 +116,8 @@ export function mergeInstanceConfigs(
     onRequestError: mergeHooks(base.onRequestError, override.onRequestError),
     onResponseError: mergeHooks(base.onResponseError, override.onResponseError),
     onError: mergeHooks(base.onError, override.onError),
+    onUploadProgress: override.onUploadProgress ?? base.onUploadProgress,
+    onDownloadProgress: override.onDownloadProgress ?? base.onDownloadProgress,
   };
 }
 

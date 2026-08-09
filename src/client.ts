@@ -16,6 +16,7 @@ import { withRetry } from './retry';
 import { normalizeRetry, mergeInstanceConfigs } from './merge';
 import { createAuthManager, type AuthManager } from './auth';
 import { handleAuthRefresh, runRequestHooks, runResponseHooks, runErrorHooks } from './hooks';
+import { xhrFetch } from './xhr';
 
 /**
  * Create a FetchKit instance with the given configuration.
@@ -160,7 +161,16 @@ function createInstanceMethods(
       const timeout = requestConfig.timeout ?? config.timeout;
 
       // Step 6: Determine fetch implementation
-      const fetchFn = requestConfig.fetch ?? config.fetch ?? globalThis.fetch;
+      const onUploadProgress = requestConfig.onUploadProgress ?? config.onUploadProgress;
+      const onDownloadProgress = requestConfig.onDownloadProgress ?? config.onDownloadProgress;
+
+      const defaultFetch =
+        onUploadProgress || onDownloadProgress
+          ? (url: string, init?: RequestInit) =>
+              xhrFetch(url, { ...init, onUploadProgress, onDownloadProgress })
+          : globalThis.fetch;
+
+      const fetchFn = requestConfig.fetch ?? config.fetch ?? defaultFetch;
 
       // Step 7: Execute with retry → timeout → fetch pipeline
       const rawResponse = await withRetry(

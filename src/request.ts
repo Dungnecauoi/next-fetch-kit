@@ -175,6 +175,7 @@ function hasFileOrBlob(obj: Record<string, unknown>): boolean {
 function objectToFormData(obj: Record<string, unknown>): FormData {
   const formData = new FormData();
   for (const [key, value] of Object.entries(obj)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
     if (value === undefined || value === null) continue;
     if (typeof Blob !== 'undefined' && value instanceof Blob) {
       formData.append(key, value);
