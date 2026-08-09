@@ -78,9 +78,6 @@ function buildParams(prefix: string, value: unknown, parts: string[], depth = 0)
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
         continue;
       }
-      if (!Object.prototype.hasOwnProperty.call(obj, key)) {
-        continue;
-      }
       const nestedKey = prefix ? `${prefix}[${key}]` : key;
       buildParams(nestedKey, obj[key], parts, depth + 1);
     }
