@@ -121,9 +121,9 @@ function serializeBody(input: unknown): SerializedBody {
     return { body: input, contentType: null };
   }
 
-  // Blob
+  // Blob / File — automatically use input.type as Content-Type if available
   if (typeof Blob !== 'undefined' && input instanceof Blob) {
-    return { body: input, contentType: null };
+    return { body: input, contentType: input.type || null };
   }
 
   // URLSearchParams
@@ -146,9 +146,51 @@ function serializeBody(input: unknown): SerializedBody {
     return { body: input, contentType: 'text/plain' };
   }
 
+  // Object containing File / Blob → Auto-convert to FormData
+  if (
+    typeof input === 'object' &&
+    typeof FormData !== 'undefined' &&
+    hasFileOrBlob(input as Record<string, unknown>)
+  ) {
+    const formData = objectToFormData(input as Record<string, unknown>);
+    return { body: formData, contentType: null };
+  }
+
   // Object / Array → JSON
   return {
     body: JSON.stringify(input),
     contentType: 'application/json',
   };
+}
+
+function hasFileOrBlob(obj: Record<string, unknown>): boolean {
+  if (typeof Blob === 'undefined') return false;
+  return Object.values(obj).some((val) => {
+    if (val instanceof Blob) return true;
+    if (Array.isArray(val)) return val.some((item) => item instanceof Blob);
+    return false;
+  });
+}
+
+function objectToFormData(obj: Record<string, unknown>): FormData {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined || value === null) continue;
+    if (typeof Blob !== 'undefined' && value instanceof Blob) {
+      formData.append(key, value);
+    } else if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (typeof Blob !== 'undefined' && item instanceof Blob) {
+          formData.append(key, item);
+        } else {
+          formData.append(key, String(item));
+        }
+      });
+    } else if (typeof value === 'object') {
+      formData.append(key, JSON.stringify(value));
+    } else {
+      formData.append(key, String(value));
+    }
+  }
+  return formData;
 }
