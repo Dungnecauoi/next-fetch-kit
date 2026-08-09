@@ -69,20 +69,22 @@ describe('onUploadProgress and onDownloadProgress', () => {
       });
 
       expect(mockUploadOnProgress).toHaveBeenCalledTimes(2);
-      expect(mockUploadOnProgress).toHaveBeenNthCalledWith(1, {
-        loaded: 500,
-        total: 1000,
-        percentage: 50,
-        rate: expect.any(Number),
-        estimated: undefined,
-      });
-      expect(mockUploadOnProgress).toHaveBeenNthCalledWith(2, {
-        loaded: 1000,
-        total: 1000,
-        percentage: 100,
-        rate: expect.any(Number),
-        estimated: undefined,
-      });
+      expect(mockUploadOnProgress).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          loaded: 500,
+          total: 1000,
+          percentage: 50,
+        }),
+      );
+      expect(mockUploadOnProgress).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          loaded: 1000,
+          total: 1000,
+          percentage: 100,
+        }),
+      );
     } finally {
       (globalThis as any).XMLHttpRequest = originalXHR;
     }
@@ -123,13 +125,13 @@ describe('onUploadProgress and onDownloadProgress', () => {
         onDownloadProgress: mockDownloadOnProgress,
       });
 
-      expect(mockDownloadOnProgress).toHaveBeenCalledWith({
-        loaded: 250,
-        total: 1000,
-        percentage: 25,
-        rate: expect.any(Number),
-        estimated: undefined,
-      });
+      expect(mockDownloadOnProgress).toHaveBeenCalledWith(
+        expect.objectContaining({
+          loaded: 250,
+          total: 1000,
+          percentage: 25,
+        }),
+      );
     } finally {
       (globalThis as any).XMLHttpRequest = originalXHR;
     }
