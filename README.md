@@ -1,14 +1,16 @@
 # next-fetch-kit
 
-A lightweight (~4.5KB gzipped), type-safe `fetch` wrapper for **Next.js** — designed for seamless operation in both **SSR (Server Components, Route Handlers, Middleware)** and **CSR (Client Components)** with built-in auth refresh queue, request deduplication, event bus, and SSR cookie forwarding.
+A lightweight (~4.5KB gzipped), type-safe, zero-dependency `fetch` wrapper for **Next.js** — designed for seamless operation in both **SSR (Server Components, Route Handlers, Middleware)** and **CSR (Client Components)** with built-in auth refresh queue, real-time upload/download progress tracking, smart auto-FormData conversion, request deduplication, typed event bus, and SSR cookie forwarding.
 
 [![license](https://img.shields.io/github/license/Dungnecauoi/next-fetch-kit.svg)](https://opensource.org/licenses/MIT)
+[![tests](https://img.shields.io/badge/tests-306%20passed%20%7C%20100%25%20coverage-brightgreen.svg)](https://github.com/Dungnecauoi/next-fetch-kit)
+[![version](https://img.shields.io/badge/version-v0.5.0-blue.svg)](https://github.com/Dungnecauoi/next-fetch-kit/releases/tag/v0.5.0)
 
 ---
 
 ## 🎯 Compatibility Matrix
 
-`next-fetch-kit` is designed and tested for all modern versions of Next.js:
+`next-fetch-kit` is designed and verified for all modern versions of Next.js and Node.js:
 
 | Framework / Version | App Router (Server Components & Actions) | Pages Router | Minimum Node.js | Status |
 |:---|:---:|:---:|:---:|:---:|
@@ -17,52 +19,49 @@ A lightweight (~4.5KB gzipped), type-safe `fetch` wrapper for **Next.js** — de
 | **Next.js 13.x** | ✅ Fully Supported | ✅ Supported | Node >= 16.14 | 🟢 Verified |
 | **React 18 & React 19** | ✅ Fully Supported | ✅ Supported | - | 🟢 Verified |
 
-> 💡 **Next.js 15 Ready**: Supports both synchronous and async `await cookies()` / `await headers()` from `next/headers` natively without any extra wrapper code.
+> 💡 **Next.js 15 Ready**: Supports both synchronous and async `await cookies()` / `await headers()` from `next/headers` natively without extra wrapper code.
 
 ---
 
-## ⚡ Why next-fetch-kit?
+## ⚡ Why next-fetch-kit? (Special Features)
 
-- **SSR + CSR Native**: Full compatibility with Next.js App Router (Server Components & Client Components).
-- **In-flight Request Deduplication**: Merges simultaneous identical `GET`/`HEAD` requests across React components into 1 network call.
-- **Next.js Revalidation & Cache**: Native `revalidate`, `tags`, and `cache` pass-through options.
-- **Auto Cookie Forwarding (SSR)**: Automatically forwards cookies from `next/headers` during SSR rendering.
-- **Auto Auth Refresh (401)**: Built-in token refresh queue for Header & httpOnly Cookie authentication patterns without race conditions.
-- **Global Event Bus (`api.on`)**: Easily subscribe to global API events (`request`, `response`, `error`, `auth:refreshed`, `auth:refresh-failed`).
-- **Hook Chaining (Interceptors)**: Pass a single function or an array of middleware functions for request/response pipelines.
-- **Ultra Lightweight**: Zero dependencies, ~4.5KB gzipped.
-- **Full Type Safety**: Written 100% in TypeScript with strict null checks and exported declarations.
+- **SSR + CSR Native**: Full compatibility with Next.js App Router (Server Components, Client Components, Route Handlers, and Middleware).
+- **📊 Real-time Progress Tracking (`onUploadProgress` / `onDownloadProgress`)**: Track percentage `0–100%`, `loaded`/`total` bytes, transfer `rate` (B/s), and `estimated` remaining seconds via native `xhrFetch` adapter.
+- **📂 Smart Dynamic File & MIME Detection**: Automatically resolves exact MIME types for direct `File`/`Blob` uploads (`image/*`, `video/*`, `application/pdf`, `.docx`, `.xlsx`).
+- **📦 Smart Auto-FormData Conversion**: Passing a plain JavaScript object containing `File` or `Blob` instances automatically converts it into `FormData` with dynamic multipart boundaries.
+- **🔒 Race-Condition-Free Auth Refresh Queue (401)**: Built-in token refresh queue for Header & httpOnly Cookie authentication patterns — handles 10 parallel 401 requests with only 1 token refresh call.
+- **🌐 Isomorphic Cookie Forwarding (SSR)**: Automatically forwards cookies from `next/headers` during SSR rendering when `forwardCookies: true`.
+- **⚡ In-flight Request Deduplication**: Merges simultaneous identical `GET`/`HEAD` requests fired at the same tick across React components into 1 network call.
+- **📢 Typed Event Bus (`api.on`)**: Strict type inference per event (`request`, `response`, `error`, `auth:refreshed`, `auth:refresh-failed`) via `FetchKitEventMap`.
+- **⚠️ Development Runtime Warnings**: Helpful `console.warn` in dev mode (`NODE_ENV !== 'production'`) when misconfiguring SSR/CSR options (e.g. `forwardCookies` in CSR or `onUploadProgress` in SSR) without crashing production.
+- **💯 100% Test Coverage**: Verified by 306 unit and integration tests across Node.js, MSW, and Browser environments.
+- **🪶 Ultra Lightweight**: Zero dependencies, ~4.5KB gzipped.
 
 ---
 
 ## 📦 Installation
 
-### From GitHub
+### From GitHub (Latest Release `v0.5.0`)
 
 Install directly from GitHub repository:
 
 ```bash
 # npm
-npm install Dungnecauoi/next-fetch-kit
+npm install Dungnecauoi/next-fetch-kit#v0.5.0
 
 # pnpm
-pnpm add Dungnecauoi/next-fetch-kit
+pnpm add Dungnecauoi/next-fetch-kit#v0.5.0
 
 # yarn
-yarn add Dungnecauoi/next-fetch-kit
+yarn add Dungnecauoi/next-fetch-kit#v0.5.0
 
 # bun
-bun add Dungnecauoi/next-fetch-kit
-```
-
-Or install a specific release version / branch:
-```bash
-npm install Dungnecauoi/next-fetch-kit#v0.4.0
+bun add Dungnecauoi/next-fetch-kit#v0.5.0
 ```
 
 ### Local Development
 
-For local development and testing:
+For local monorepo / workspace development:
 
 ```bash
 # Relative path from your Next.js project
@@ -101,81 +100,52 @@ await api.delete('/users/1');
 
 ---
 
-## 🔥 Features & Usage Guide
+## 🔥 Highlighted Special Features & Usage Guide
 
-### 1. In-flight Request Deduplication (`dedupe`)
+### 1. Real-time Upload & Download Progress Tracking (`onUploadProgress` / `onDownloadProgress`)
 
-Automatically merges identical simultaneous `GET`/`HEAD` requests fired at the same tick from different UI components (e.g. `Header`, `Sidebar`, `Profile`) into 1 network call.
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  dedupe: true, // Enabled by default
-});
-
-// Component A and Component B call this simultaneously → Only 1 HTTP request is sent!
-const [user1, user2] = await Promise.all([
-  api.get('/me'),
-  api.get('/me'),
-]);
-```
-
-### 2. Next.js Cache & Revalidation (App Router)
-
-Pass native Next.js cache and revalidation parameters directly:
+Track real-time progress for file uploads and downloads with detailed metrics (`percentage`, `loaded`, `total`, `rate`, `estimated`):
 
 ```typescript
-// ISR — revalidate every 60 seconds with cache tags
-const { data } = await api.get<Product[]>('/products', {
-  next: { revalidate: 60, tags: ['products'] },
-});
-
-// Disable cache (SSR fresh fetch)
-const { data } = await api.get<User>('/me', {
-  cache: 'no-store',
-});
-
-// Force cache
-const { data } = await api.get<Config>('/config', {
-  cache: 'force-cache',
+await api.post('/upload', {
+  body: {
+    title: 'Monthly Report',
+    file: excelFile,
+  },
+  onUploadProgress: (progress) => {
+    console.log(`Upload percentage: ${progress.percentage}%`);
+    console.log(`Transferred: ${progress.loaded} / ${progress.total} bytes`);
+    console.log(`Rate: ${progress.rate} B/s — Estimated remaining: ${progress.estimated}s`);
+  },
+  onDownloadProgress: (progress) => {
+    console.log(`Download percentage: ${progress.percentage}%`);
+  },
 });
 ```
 
-### 3. SSR Cookie Forwarding (`forwardCookies`)
+### 2. Smart Auto-FormData & Dynamic MIME Type Resolution
 
-In Next.js Server Components, native `fetch` does not automatically forward incoming browser cookies to backend microservices. `next-fetch-kit` solves this automatically:
+No need to write `new FormData()` and `.append()` manually! Passing an object containing `File` or `Blob` instances automatically serializes into `FormData`:
 
-**Option A: Global Auto-forwarding**
 ```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  credentials: 'include',
-  forwardCookies: true, // Auto-reads cookies() from next/headers in SSR
+// Pass a plain JS object containing Files (Images, Videos, PDF, DOCX, XLSX):
+await api.post('/products', {
+  body: {
+    productName: 'Dell XPS 15',
+    price: 1500,
+    thumbnail: imageFile,      // Auto MIME: image/png or image/jpeg
+    specSheet: excelFile,      // Auto MIME: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    document: pdfFile,         // Auto MIME: application/pdf
+    videoReview: videoFile,    // Auto MIME: video/mp4
+    tags: ['laptop', 'tech'],
+  },
 });
-
-// Server Component (RSC) — cookies are automatically forwarded
-export default async function Page() {
-  const { data } = await api.get<User>('/me');
-  return <div>Welcome, {data.name}</div>;
-}
+// ➔ Automatically serialized into multipart/form-data with exact MIME types and boundaries!
 ```
 
-**Option B: Explicit per-request**
-```typescript
-import { cookies } from 'next/headers';
+### 3. Automatic Token Refresh Queue (401 Unauthorized — Anti-Race Condition)
 
-export default async function Page() {
-  const cookieStore = await cookies();
-  const { data } = await api.get<User>('/me', {
-    cookies: cookieStore,
-  });
-  return <div>Welcome, {data.name}</div>;
-}
-```
-
-### 4. Automatic Token Refresh Queue (401 Unauthorized)
-
-Handles 401 Unauthorized responses with an anti-race-condition request queue mechanism.
+Handles 401 Unauthorized responses with a locking queue mechanism so 10 parallel 401 requests trigger only 1 token refresh call:
 
 **Header-based Authentication (Authorization Bearer Token):**
 ```typescript
@@ -184,16 +154,16 @@ const api = createFetchKit({
   auth: {
     getToken: () => localStorage.getItem('accessToken'),
 
-    refresh: async (kit) => {
+    refresh: async (rawKit) => {
       // Uses raw kit without auth interceptors to prevent refresh loops
-      const { data } = await kit.post<{ accessToken: string }>('/auth/refresh', {
+      const { data } = await rawKit.post<{ accessToken: string }>('/auth/refresh', {
         body: { refreshToken: localStorage.getItem('refreshToken') },
       });
       return data.accessToken;
     },
 
     onRefreshed: (newToken) => {
-      localStorage.setItem('accessToken', newToken);
+      localStorage.setItem('accessToken', newToken as string);
     },
 
     onRefreshFailed: () => {
@@ -210,8 +180,8 @@ const api = createFetchKit({
   baseURL: 'https://api.example.com',
   credentials: 'include',
   auth: {
-    refresh: async (kit) => {
-      await kit.post('/auth/refresh');
+    refresh: async (rawKit) => {
+      await rawKit.post('/auth/refresh');
       // Server sets new httpOnly cookie on response
     },
     onRefreshFailed: () => {
@@ -233,122 +203,74 @@ Request A → 401
   │   └── Retry C with new token ✅
 ```
 
-### 5. Global Event Bus (`api.on()` / `api.off()`)
+### 4. SSR Cookie Forwarding (`forwardCookies`)
 
-Subscribe to global API events from React Contexts, Toast containers, or Auth Providers:
-
-```typescript
-// Subscribe to global errors for Toast notifications
-const unsubscribe = api.on('error', (error) => {
-  toast.error(error.message);
-});
-
-// Subscribe to refresh failure for login redirection
-api.on('auth:refresh-failed', () => {
-  router.push('/login');
-});
-
-// Clean up listener when React component unmounts
-unsubscribe();
-```
-
-### 6. Interceptor Hook Chaining (Array of Functions)
-
-Pass a single function or an array of hook functions executed sequentially in order:
+In Next.js Server Components, native `fetch` does not automatically forward incoming browser cookies to backend microservices. `next-fetch-kit` handles this seamlessly:
 
 ```typescript
 const api = createFetchKit({
   baseURL: 'https://api.example.com',
-  onRequest: [addAuthHeader, addTraceId, logRequest],
+  credentials: 'include',
+  forwardCookies: true, // Auto-reads cookies() from next/headers in SSR
+});
+
+// Server Component (RSC) — cookies are automatically forwarded
+export default async function Page() {
+  const { data } = await api.get<User>('/me');
+  return <div>Welcome, {data.name}</div>;
+}
+```
+
+### 5. In-flight Request Deduplication (`dedupe`)
+
+Automatically merges identical simultaneous `GET`/`HEAD` requests fired at the same tick from different UI components (e.g. `Header`, `Sidebar`, `Profile`) into 1 network call:
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  dedupe: true, // Enabled by default
+});
+
+// Component A and Component B call this simultaneously → Only 1 HTTP request is sent!
+const [user1, user2] = await Promise.all([
+  api.get('/me'),
+  api.get('/me'),
+]);
+```
+
+### 6. Typed Event Bus (`api.on()` / `api.off()`)
+
+Subscribe to global API events from React Contexts, Toast containers, or Auth Providers with full TypeScript type safety (`FetchKitEventMap`):
+
+```typescript
+// Subscribe to global errors for Toast notifications (err is typed FetchKitError)
+const unsubscribe = api.on('error', (err) => {
+  toast.error(err.message);
+});
+
+// Subscribe to token refreshed event (token is string | void)
+api.on('auth:refreshed', (token) => {
+  console.log('New Token:', token);
+});
+
+// Clean up listener on unmount
+unsubscribe();
+```
+
+### 7. Interceptor Hook Chaining (Array of Functions)
+
+Pass a single function or an array of hook functions executed sequentially:
+
+```typescript
+const api = createFetchKit({
+  baseURL: 'https://api.example.com',
+  onRequest: [addTraceId, logHeaders],
   onResponse: [transformDates, logMetrics],
 });
 
 // Extending an instance appends child hooks to parent hooks
 const childApi = api.extend({
   onRequest: [childSpecificHook],
-});
-```
-
-### 7. Custom Status Validation (`validateStatus` & `ignoreResponseError`)
-
-```typescript
-// Treat 4xx responses as valid responses (do not throw HTTP error)
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  validateStatus: (status) => status < 500,
-});
-
-// Shortcut: ignoreResponseError: true
-const { data, status } = await api.get('/users/999', {
-  ignoreResponseError: true,
-});
-```
-
-### 8. Retry Engine with Backoff & `maxDelay` Cap
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  retry: {
-    count: 3,
-    delay: 1000,
-    backoff: true,
-    maxDelay: 10000, // Caps delay at maximum 10 seconds
-    beforeRetry: ({ attempt, delay, error }) => {
-      console.log(`Retrying attempt ${attempt} after ${delay}ms due to ${error.message}`);
-    },
-  },
-});
-```
-
-### 9. Query Parameters (`params` / `query` & Extended Types)
-
-Supports `Set`, `Map`, `BigInt`, nested objects, and arrays out-of-the-box:
-
-```typescript
-await api.get('/items', {
-  query: {
-    page: 1,
-    limit: 20,
-    filter: { status: 'active' },
-    ids: new Set([10, 20, 30]),
-    bigCount: 9007199254740991n,
-  },
-});
-```
-
-### 10. Data Transformers (`transformRequest` & `transformResponse`)
-
-```typescript
-const api = createFetchKit({
-  baseURL: 'https://api.example.com',
-  transformResponse: (data) => convertSnakeToCamel(data),
-  transformRequest: (data) => convertCamelToSnake(data),
-});
-```
-
-### 11. Extend Instance
-
-```typescript
-const baseApi = createFetchKit({
-  baseURL: 'https://api.example.com',
-  timeout: 10000,
-});
-
-// Inherit all base config + add custom headers
-const tenantApi = baseApi.extend({
-  headers: { 'X-Tenant-Id': 'tenant-123' },
-});
-```
-
-### 12. File Upload (FormData)
-
-```typescript
-const formData = new FormData();
-formData.append('avatar', file);
-
-const { data } = await api.post<UploadResponse>('/upload', {
-  body: formData, // Content-Type auto-detected
 });
 ```
 
@@ -398,6 +320,8 @@ try {
 | `auth` | `AuthConfig` | `undefined` | Auth token management & refresh queue config |
 | `fetch` | `typeof fetch` | `globalThis.fetch` | Custom fetch implementation |
 | `dedupe` | `boolean` | `true` | Auto-deduplicate in-flight GET/HEAD requests |
+| `onUploadProgress` | `ProgressCallback` | `undefined` | Upload progress callback (0-100%) |
+| `onDownloadProgress` | `ProgressCallback` | `undefined` | Download progress callback (0-100%) |
 | `validateStatus` | `(status: number) => boolean` | `200..299` | Custom status validator function |
 | `ignoreResponseError` | `boolean` | `false` | When true, disables HTTP error throwing |
 | `transformRequest` | `(data: any) => any` | `undefined` | Outbound request body transformer |
@@ -407,33 +331,6 @@ try {
 | `onRequestError` | `HookOrArray<Function>` | `undefined` | Network error hook(s) |
 | `onResponseError` | `HookOrArray<Function>` | `undefined` | HTTP error hook(s) |
 | `onError` | `HookOrArray<Function>` | `undefined` | Universal error hook(s) |
-
-### Instance Methods
-
-```typescript
-api.get<T>(path, config?)     → Promise<FetchKitResponse<T>>
-api.post<T>(path, config?)    → Promise<FetchKitResponse<T>>
-api.put<T>(path, config?)     → Promise<FetchKitResponse<T>>
-api.patch<T>(path, config?)   → Promise<FetchKitResponse<T>>
-api.delete<T>(path, config?)  → Promise<FetchKitResponse<T>>
-api.head<T>(path, config?)    → Promise<FetchKitResponse<T>>
-api.options<T>(path, config?) → Promise<FetchKitResponse<T>>
-api.extend(overrides)         → FetchKitInstance
-api.on(event, handler)        → () => void (Unsubscribe function)
-api.off(event, handler)       → void
-```
-
-### `FetchKitResponse<T>`
-
-```typescript
-interface FetchKitResponse<T> {
-  data: T;           // Parsed response body
-  status: number;    // HTTP status code
-  statusText: string;
-  headers: Headers;  // Response headers
-  raw: Response;     // Raw Response object
-}
-```
 
 ---
 
